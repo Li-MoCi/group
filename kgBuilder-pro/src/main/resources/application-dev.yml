@@ -1,0 +1,30 @@
+server:
+  port: 8080
+spring:
+  servlet:
+    multipart:
+      max-file-size: 100000000
+      maxRequestSize: 200000000
+
+  neo4j:
+    url: neo4j://localhost:7687
+#    authentication:
+    username: neo4j
+    password: Lmc060217!
+  datasource:
+      url: jdbc:mysql://localhost:3306/kgdemo?useSSL=false&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UT
+      driverClassName: com.mysql.cj.jdbc.Driver
+      username: root
+      password: lmc060217
+      type: com.zaxxer.hikari.HikariDataSource
+mybatis:
+  typeAliasesPackage: com.warmer.kgmaker.entity
+  mapperLocations: classpath*:/mapping/*.xml
+file:
+  serverurl:  http://localhost:8080
+  location : D:\\kgmanager\\csv\\   #如果是Windows情况下，格式是 D:\\kgmanager\\csv\\   linx 格式"/home/kgmanager/csv/";
+## 添加以下配置
+#debug: true
+#logging:
+#  level:
+#    root: debug
