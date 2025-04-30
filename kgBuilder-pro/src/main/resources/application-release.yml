@@ -12,13 +12,13 @@ spring:
     url: neo4j://localhost：7687
     authentication:
       username: neo4j
-      password: Lmc060217!
+      password:
 
   datasource:
     url: jdbc:mysql://localhost:3306/kgdemo?useSSL=false&amp;useUnicode=true&amp;characterEncoding=UTF-8&serverTimezone=UT
     driverClassName: com.mysql.cj.jdbc.Driver
     username: root
-    password: lmc060217
+    password:
     type: com.zaxxer.hikari.HikariDataSource
 mybatis:
   typeAliasesPackage: com.warmer.kgmaker.entity
