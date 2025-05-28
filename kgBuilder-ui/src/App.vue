@@ -1,23 +1,23 @@
 <template>
   <div id="app">
-     <kg-header ref="header"></kg-header>
+    <!-- <kg-header ref="header"></kg-header> -->
     <router-view />
   </div>
 </template>
 <script>
-import KgHeader from "@/components/KGHeader";
+// import KgHeader from "@/components/KGHeader"; // No longer needed here
 export default {
-components: {
-    KgHeader,
+  components: {
+    // KgHeader, // No longer needed here
   }
-}
+};
 </script>
 <style lang="scss">
 #app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
- // text-align: center;
+  // text-align: center;
   color: #2c3e50;
 }
 
@@ -33,5 +33,7 @@ components: {
     }
   }
 }
-body{ margin: 0px; }
+body {
+  margin: 0px;
+}
 </style>

@@ -43,17 +43,17 @@
           >
             <div>
               <div class="datatitle">
-                <a href="javascript:;" @click="linkto(item)"
-                  >{{ index + 1 }}.{{ item.条目名称 }}
+                <a href="javascript:;" @click="linkto(item)">
+                  {{ index + 1 }}.{{ item.条目名称 }}
                 </a>
               </div>
               <div class="datasource">
                 <span>{{ item.工具书名称 }}</span>
               </div>
             </div>
-            <span class="datacontent" @click="linkto(item)" v-html="item.快照">
+            <div class="datacontent" @click="linkto(item)">
               {{ item.快照 }}
-            </span>
+            </div>
           </div>
         </div>
       </div>
@@ -65,7 +65,7 @@
         <a
           :key="index"
           v-for="(m, index) in pageSizeList"
-          @click="setMatchSize(m, this)"
+          @click="setMatchSize(m)"
           href="javascript:void(0)"
           :class="[m.isActive ? 'sd-active' : '', 'ss-d sd' + (index + 1)]"
         >
@@ -115,9 +115,20 @@
 import axios from "axios";
 import * as d3 from "d3";
 import $ from "jquery";
+import KGBuilderBase from "./KGBuilderBase.vue";
+import ZoomMixin from "../mixins/ZoomMixin";
 
 export default {
-  props: ["pid"],
+  name: "KGBuilderSimple",
+
+  extends: KGBuilderBase,
+
+  mixins: [ZoomMixin],
+
+  props: {
+    pid: String
+  },
+
   data() {
     return {
       qaGraphNode: {},
@@ -567,9 +578,31 @@ export default {
         document.webkitExitFullscreen();
       }
     },
-    btnCollapseNode() {},
-    btnOpenNode() {},
-    close() {}
+    btnCollapseNode() {
+      // 实现节点收起逻辑
+    },
+    btnOpenNode() {
+      // 实现节点展开逻辑
+    },
+    close() {
+      document.getElementById("my_custom_menu").style.display = "none";
+    },
+    // 设置匹配大小
+    setMatchSize(m) {
+      this.pageSizeList.forEach(item => {
+        item.isActive = item === m;
+      });
+      this.updateGraph();
+    },
+    // 处理右键菜单
+    handleContextMenu(event, node) {
+      event.preventDefault();
+      // 显示自定义上下文菜单
+      const menu = document.getElementById("my_custom_menu");
+      menu.style.display = "block";
+      menu.style.left = `${event.pageX}px`;
+      menu.style.top = `${event.pageY}px`;
+    }
   }
 };
 </script>

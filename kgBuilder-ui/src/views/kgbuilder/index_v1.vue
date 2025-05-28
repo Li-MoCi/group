@@ -6,201 +6,228 @@
  * @LastEditTime: 2022-03-29 11:23:25
 -->
 <template>
-  <div class="mind-box">
-    <!-- 左侧 -->
-    <el-scrollbar class="mind-l">
-      <div class="ml-m">
-        <div class="guanzhu" style="padding: 20px;">
-          <h2 class="hometitle ml-ht">图谱列表</h2>
-          <div class="ml-a-box" style="min-height:280px">
-            <el-tag
-              class="tag-ml-5"
-              @click="createDomain"
-              >新建图谱</el-tag
-            >
-            <el-tag
-              @click="matchDomainGraph(m)"
-              v-for="(m, index) in pageModel.nodeList"
-              :key="index"
-              :type="m.type"
-              effect="dark"
-              :title="m.name"
-              class="tag-ml-5"
-            >
-              {{ m.name }}
-            </el-tag>
-          </div>
-          <div class="fr">
-            <a
-              href="javascript:void(0)"
-              class="svg-a-sm"
-              v-show="pageModel.pageIndex > 1"
-              @click="prev"
-              >上一页</a
-            >
-            <a
-              href="javascript:void(0)"
-              class="svg-a-sm"
-              v-show="pageModel.pageIndex < pageModel.totalPage"
-              @click="next"
-              >下一页</a
-            >
-          </div>
-        </div>
-        <!-- 关注及交流 -->
-        <div>
-          <kg-focus ref="kg_focus"></kg-focus>
+  <div class="mind_box-wrapper">
+    <KGHeader />
+    <!-- 新增 KGHeader -->
+    <div class="llm-preview-controls-wrapper" v-if="showLLMPreviewControls">
+      <!-- 新增 LLM 预览控制区域 -->
+      <div class="llm-preview-controls">
+        <p>
+          LLM已生成图谱建议，是否应用到当前图谱 "<span
+            style="color:redfont-weight:bold;"
+            >{{ domainAlia }}</span
+          >"？应用后将替换现有内容。
+        </p>
+        <div class="buttons">
+          <el-button type="primary" size="small" @click="applyLLMPreview"
+            >应用LLM结果</el-button
+          >
+          <el-button size="small" @click="cancelLLMPreview">取消</el-button>
         </div>
       </div>
-    </el-scrollbar>
-    <!-- 左侧over -->
-    <!-- 右侧 -->
-    <div class="mind-con">
-      <!-- 头部工具栏 -->
-      <div class="mind-top clearfix">
-        <span>
-          <span class="dibmr">
-            <span>当前领域:</span>
-            <span style="color:red">{{ domainAlia }}</span>
-          </span>
-        </span>
-        <div v-show="domain != ''" class="fl" style="display: flex">
-          <div class="search">
-            <el-button @click="getDomainGraph(0)">
-              <svg class="icon" aria-hidden="true">
-                <use xlink:href="#icon-search"></use>
-              </svg>
-            </el-button>
-            <el-input
-              placeholder="请输入关键词"
-              v-model="nodeName"
-              @keyup.enter.native="getDomainGraph"
-            ></el-input>
-          </div>
-          <span>
-            <span class="dibmr">
-              <span>显示节点个数:</span>
+    </div>
+    <div class="mind-box">
+      <!-- 左侧 -->
+      <el-scrollbar class="mind-l">
+        <div class="ml-m">
+          <div class="guanzhu" style="padding: 20px;">
+            <h2 class="hometitle ml-ht">图谱列表</h2>
+            <div class="ml-a-box" style="min-height:280px">
+              <el-tag class="tag-ml-5" @click="createDomain">新建图谱</el-tag>
               <el-tag
-                v-for="(m, index) in pageSizeList"
-                size="mini"
-                :key="index"  :type="m.isActive?'success':''"
+                @click="matchDomainGraph(m)"
+                v-for="(m, index) in pageModel.nodeList"
+                :key="index"
+                :type="m.type"
+                effect="dark"
+                :title="m.name"
                 class="tag-ml-5"
-                @click="setMatchSize(m)"
-                >{{ m.size }}</el-tag
               >
-            </span>
-          </span>
-        </div>
-        <div class="fr">
-          <a href="javascript:void(0)" @click="showJsonData" class="svg-a-sm">
-            <i class="el-icon-tickets">查看数据</i>
-          </a>
-
-          <a href="javascript:void(0)" @click="saveImage" class="svg-a-sm">
-            <i class="el-icon-camera-solid">截图</i>
-          </a>
-          <a href="javascript:void(0)" @click="importGraph" class="svg-a-sm">
-            <i class="el-icon-upload">导入</i>
-          </a>
-          <a href="javascript:void(0)" @click="exportGraph" class="svg-a-sm">
-            <i class="el-icon-download">导出</i>
-          </a>
-          <a
-            href="javascript:void(0)"
-            @click="requestFullScreen"
-            class="svg-a-sm"
-          >
-            <i class="el-icon-monitor">全屏</i>
-          </a>
-          <a href="javascript:void(0)" @click="help" class="svg-a-sm">
-            <i class="el-icon-info">帮助</i>
-          </a>
-          <a href="javascript:void(0)" @click="wanted" class="svg-a-sm">
-            <i class="el-icon-question">反馈</i>
-          </a>
-        </div>
-      </div>
-      <!-- 头部over -->
-      <!-- 中部 -->
-      <el-scrollbar class="mind-cen" id="graphcontainerdiv">
-        <div id="nodeDetail" class="node_detail">
-          <h5>详细数据</h5>
-          <span class="node_pd" v-for="(m, k) in nodeDetail" :key="k"
-            >{{ k }}:{{ m }}</span
-          >
-        </div>
-        <!-- 中部图谱画布 -->
-        <div id="graphContainer" class="graphContainer">
-          <kgbuilder
-            ref="kg_builder"
-            :styles="style"
-            :initData="graphData"
-            :domain="domain"
-            :domainId="domainId"
-            :ring-function="RingFunction"
-            @editForm="editForm"
-          />
+                {{ m.name }}
+              </el-tag>
+            </div>
+            <div class="fr">
+              <a
+                href="javascript:void(0)"
+                class="svg-a-sm"
+                v-show="pageModel.pageIndex > 1"
+                @click="prev"
+                >上一页</a
+              >
+              <a
+                href="javascript:void(0)"
+                class="svg-a-sm"
+                v-show="pageModel.pageIndex < pageModel.totalPage"
+                @click="next"
+                >下一页</a
+              >
+            </div>
+          </div>
         </div>
       </el-scrollbar>
-      <!-- 中部over -->
-      <div class="svg-set-box"></div>
-      <!-- 底部 -->
+      <!-- 左侧over -->
+      <!-- 右侧 -->
+      <div class="mind-con">
+        <!-- 头部工具栏 -->
+        <div class="mind-top clearfix">
+          <span>
+            <span class="dibmr">
+              <span>当前领域:</span>
+              <span style="color:red">{{ domainAlia }}</span>
+            </span>
+          </span>
+          <div v-show="domain != ''" class="fl" style="display: flex">
+            <div class="search">
+              <el-button @click="getDomainGraph(0)">
+                <svg class="icon" aria-hidden="true">
+                  <use xlink:href="#icon-search"></use>
+                </svg>
+              </el-button>
+              <el-input
+                placeholder="请输入关键词"
+                v-model="nodeName"
+                @keyup.enter.native="getDomainGraph"
+              ></el-input>
+            </div>
+            <span>
+              <span class="dibmr">
+                <span>显示节点个数:</span>
+                <el-tag
+                  v-for="(m, index) in pageSizeList"
+                  size="mini"
+                  :key="index"
+                  :type="m.isActive ? 'success' : ''"
+                  class="tag-ml-5"
+                  @click="setMatchSize(m)"
+                  >{{ m.size }}</el-tag
+                >
+              </span>
+            </span>
+          </div>
+          <div class="fr">
+            <a href="javascript:void(0)" @click="showJsonData" class="svg-a-sm">
+              <i class="el-icon-tickets">查看数据</i>
+            </a>
 
-      <!-- 底部over -->
-    </div>
-    <!-- 右侧over -->
-    <!--编辑窗口-->
-    <div>
-      <kg-form
-        ref="kg_form"
-        @batchCreateNode="batchCreateNode"
-        @batchCreateChildNode="batchCreateChildNode"
-        @batchCreateSameNode="batchCreateSameNode"
-        @createNode="createNode"
-        @initNodeImage="initNodeImage"
-        @initNodeContent="initNodeContent"
-        @saveNodeImage="saveNodeImage"
-        @saveNodeContent="saveNodeContent"
-        @getDomain="getDomain"
-      >
-      </kg-form>
-    </div>
-    <!-- 富文本展示 -->
-    <div>
-      <node-richer ref="node_richer"></node-richer>
-    </div>
-    <div>
-      <kg-json ref="kg_json" :data="graphData"></kg-json>
-    </div>
-    <div>
-      <kg-help ref="kg_help"></kg-help>
-    </div>
-    <div>
-      <kg-wanted ref="kg_wanted"></kg-wanted>
+            <a href="javascript:void(0)" @click="saveImage" class="svg-a-sm">
+              <i class="el-icon-camera-solid">截图</i>
+            </a>
+            <a href="javascript:void(0)" @click="importGraph" class="svg-a-sm">
+              <i class="el-icon-upload">导入</i>
+            </a>
+            <a href="javascript:void(0)" @click="exportGraph" class="svg-a-sm">
+              <i class="el-icon-download">导出</i>
+            </a>
+            <a
+              href="javascript:void(0)"
+              @click="requestFullScreen"
+              class="svg-a-sm"
+            >
+              <i class="el-icon-monitor">全屏</i>
+            </a>
+          </div>
+        </div>
+        <!-- 头部over -->
+        <!-- 中部 -->
+        <el-scrollbar class="mind-cen" id="graphcontainerdiv">
+          <div id="nodeDetail" class="node_detail">
+            <h5>详细数据</h5>
+            <span class="node_pd" v-for="(m, k) in nodeDetail" :key="k"
+              >{{ k }}:{{ m }}</span
+            >
+          </div>
+          <!-- 中部图谱画布 -->
+          <div id="graphContainer" class="graphContainer">
+            <kgbuilder
+              ref="kg_builder"
+              :styles="style"
+              :initData="graphData"
+              :domain="domain"
+              :domainId="domainId"
+              :ring-function="RingFunction"
+              @editForm="editForm"
+            />
+          </div>
+        </el-scrollbar>
+        <!-- 中部over -->
+        <div class="svg-set-box"></div>
+        <!-- 底部 -->
+
+        <!-- 底部over -->
+      </div>
+      <!-- 右侧over -->
+      <!--编辑窗口-->
+      <div>
+        <kg-form
+          ref="kg_form"
+          @batchCreateNode="batchCreateNode"
+          @batchCreateChildNode="batchCreateChildNode"
+          @batchCreateSameNode="batchCreateSameNode"
+          @createNode="createNode"
+          @initNodeImage="initNodeImage"
+          @initNodeContent="initNodeContent"
+          @saveNodeImage="saveNodeImage"
+          @saveNodeContent="saveNodeContent"
+          @getDomain="getDomain"
+        >
+        </kg-form>
+      </div>
+      <!-- 富文本展示 -->
+      <div>
+        <node-richer ref="node_richer"></node-richer>
+      </div>
+      <div>
+        <kg-json ref="kg_json" :data="graphData"></kg-json>
+      </div>
     </div>
   </div>
 </template>
 <script>
 import _ from "lodash";
-import { kgBuilderApi } from "@/api";
+import { kgBuilderApi, llmApi } from "@/api";
 import KgForm from "@/views/kgbuilder/components/kg_form";
 import NodeRicher from "@/views/kgbuilder/components/node_richer";
-import KgFocus from "@/components/KGFocus";
-import KgWanted from "@/components/KGWanted";
+//import KgFocus from "@/components/KGFocus";
+//import KgWanted from "@/components/KGWanted";
 import KgJson from "@/views/kgbuilder/components/kg_json";
 import KgHelp from "@/views/kgbuilder/components/kg_help";
 import html2canvas from "html2canvas";
 import kgbuilder from "@/components/KGBuilder_v1";
+import KGHeader from "@/components/KGHeader";
 import { EventBus } from "@/utils/event-bus.js";
+const {
+  getDomainPage,
+  getDomainGraph,
+  getDomains,
+  createDomain,
+  createNode,
+  batchCreateNode,
+  batchCreateChildNode,
+  batchCreateSameNode,
+  deleteDomain,
+  deleteNode,
+  updateNode,
+  updateNodeCoordinate,
+  deleteLink,
+  createLink,
+  updateLink,
+  editNodeRemark,
+  initNodeImage,
+  saveNodeImage,
+  initNodeContent,
+  saveNodeContent,
+  getNodeDetail
+} = kgBuilderApi;
 export default {
   name: "kgBuilderv1",
   components: {
+    KGHeader,
     KgForm,
     NodeRicher,
-    KgFocus,
+    //KgFocus,
     KgJson,
     KgHelp,
-    KgWanted,
+    //KgWanted,
     kgbuilder
   },
   provide() {
@@ -247,26 +274,6 @@ export default {
                 );
               },
               childrens: []
-            },
-            {
-              title: "块",
-              icon: {
-                type: "text",
-                content: "块"
-              },
-              defaultEvent: (d, _this, d3) => {
-                this.$message({ message: "开发中", type: "success" });
-              }
-            },
-            {
-              title: "集",
-              icon: {
-                type: "text",
-                content: "集"
-              },
-              defaultEvent: (d, _this, d3) => {
-                this.$message({ message: "开发中", type: "success" });
-              }
             }
           ]
         },
@@ -450,26 +457,6 @@ export default {
                   }
                 }
               ]
-            },
-            {
-              title: "块",
-              icon: {
-                type: "text",
-                content: "块"
-              },
-              defaultEvent: (d, _this, d3) => {
-                console.log("块");
-              }
-            },
-            {
-              title: "集",
-              icon: {
-                type: "text",
-                content: "集"
-              },
-              defaultEvent: (d, _this, d3) => {
-                console.log("集");
-              }
             }
           ]
         }
@@ -486,7 +473,7 @@ export default {
       ],
       domain: "",
       domainId: 0,
-      domainAlia:"",
+      domainAlia: "",
       nodeName: "",
       pageSize: 500,
       activeNode: null,
@@ -505,7 +492,10 @@ export default {
         links: []
       },
       jsonShow: false,
-      helpShow: false
+      helpShow: false,
+      showLLMPreviewControls: false,
+      llmPreviewData: null,
+      isLLMPreview: false
     };
   },
   filters: {
@@ -516,20 +506,37 @@ export default {
   },
   mounted() {},
   created() {
-    this.getDomain();
+    this.getDomain(); // 您可以决定是否保留
+    //this.getDomainPage(); // 根据您的决定，保持注释
+
+    // 移除或注释掉旧的/错误的 EventBus 监听
+    // EventBus.$on("generateLLMGraph", this.handleLLMPreviewControls);
+
+    console.log(
+      '[index_v1] Adding EventBus listener for "generate-graph-via-llm"'
+    );
+    EventBus.$on("generate-graph-via-llm", this.handleLLMGenerationRequest); // <--- 这是正确的监听
+
     this.$nextTick(() => {
       this.width = document.getElementsByClassName(
         "graphContainer"
       )[0].offsetWidth;
-      //this.height = document.getElementsByClassName('graphContainer')[0].offsetHeight
       this.height = window.screen.height;
       this.style = {
         width: this.width + "px",
         height: this.height + "px"
       };
-      //console.log(this.width, this.height)
       EventBus.$emit("DIV", this.width, this.height);
     });
+  },
+  beforeDestroy() {
+    // 移除或注释掉旧的/错误的 EventBus 移除
+    // EventBus.$off("generateLLMGraph", this.handleLLMPreviewControls);
+
+    console.log(
+      '[index_v1] Removing EventBus listener for "generate-graph-via-llm"'
+    );
+    EventBus.$off("generate-graph-via-llm", this.handleLLMGenerationRequest); // <--- 这是正确的移除
   },
   methods: {
     _thisKey(item) {
@@ -1116,6 +1123,166 @@ export default {
           });
         }
       });
+    },
+    handleLLMGenerationRequest: async function(text) {
+      if (!this.domainId) {
+        this.$message.warning("请先选择或创建一个图谱领域！");
+        return;
+      }
+      // 校验接收到的文本
+      if (
+        !text ||
+        (typeof text === "string" && text.trim() === "") ||
+        text === "null"
+      ) {
+        this.$message.error(
+          "无法处理无效的输入文本。请在顶部输入框中提供有效文本。"
+        );
+        // 可以在这里考虑是否重置 isLLMProcessing（如果之前被意外设置为true）
+        // this.isLLMProcessing = false; // 如果适用
+        return;
+      }
+      if (this.isLLMProcessing) {
+        this.$message.info("正在处理中，请稍候...");
+        return;
+      }
+      this.isLLMProcessing = true;
+      this.llmPreviewData = null; // 重置预览数据
+      this.showLLMPreviewControls = false;
+      this.$message.info("LLM正在生成图谱，请稍候...");
+
+      try {
+        const paramsToApi = {
+          text: text // 使用从EventBus接收的文本
+          // domainId: this.domainId // 后端LLMController目前没用domainId，但如果llmApi.js中 payload 添加了，这里也应匹配
+        };
+        // 如果您的 llmApi.js 中的 extractKnowledge 需要 domainId，请确保在这里传递
+        // 例如: if (this.domainId) paramsToApi.domainId = this.domainId;
+
+        const response = await llmApi.extractKnowledge(paramsToApi);
+
+        // --- 更安全的日志记录 ---
+        console.log("[index_v1.vue] LLM API raw response object:", response);
+        let actualData = null;
+
+        // 检查 response 和 response.data 是否存在，以及它们的类型
+        if (response && typeof response === "object") {
+          if (response.data && typeof response.data === "object") {
+            console.log("[index_v1.vue] LLM API response.data:", response.data);
+            actualData = response.data; // 优先使用 response.data
+          } else {
+            // 如果 response.data 不存在或不是对象，尝试直接使用 response
+            // (这假设您的 request 工具可能直接返回业务数据)
+            console.log(
+              "[index_v1.vue] LLM API response.data is not a valid object, checking response itself."
+            );
+            actualData = response;
+          }
+        } else if (typeof response === "string") {
+          // 如果整个 response 是一个字符串，尝试解析
+          console.log(
+            "[index_v1.vue] LLM API raw response is a string, attempting to parse:",
+            response
+          );
+          try {
+            actualData = JSON.parse(response);
+          } catch (e) {
+            console.error(
+              "[index_v1.vue] Failed to parse raw response string as JSON:",
+              e
+            );
+            actualData = null; // 解析失败
+          }
+        } else {
+          console.log(
+            "[index_v1.vue] LLM API raw response is not an object or string:",
+            response
+          );
+        }
+        // --- 结束日志记录 ---
+
+        // 现在基于 actualData (它应该是后端返回的 {nodes, links} 对象) 进行判断
+        if (
+          actualData &&
+          typeof actualData === "object" &&
+          Array.isArray(actualData.nodes) &&
+          Array.isArray(actualData.links)
+        ) {
+          if (actualData.nodes.length > 0 || actualData.links.length > 0) {
+            // 至少有节点或链接
+            this.llmPreviewData = actualData; // 存储预览数据
+            this.showLLMPreviewControls = true; // 显示控制按钮
+            this.$message.success("LLM图谱已生成，请确认是否应用。");
+            console.log(
+              "[index_v1.vue] Assigned to llmPreviewData:",
+              JSON.parse(JSON.stringify(this.llmPreviewData))
+            );
+          } else {
+            // LLM返回了空的nodes和links数组
+            this.$message.info("LLM未从文本中提取到有效的图谱信息。");
+          }
+        } else {
+          // API调用成功，但返回的数据结构不符合预期
+          this.$message.error("LLM图谱生成失败：服务返回的数据格式不正确。");
+          console.error(
+            "[index_v1.vue] LLM Service returned unexpected data format. Expected {nodes:[], links:[]}, received:",
+            actualData
+          );
+        }
+      } catch (error) {
+        console.error("[index_v1.vue] LLM API call failed with error:", error);
+        // 尝试从 error 对象中获取更具体的错误信息
+        let errorMessage = "调用LLM服务时发生网络或未知错误。";
+        if (
+          error.response &&
+          error.response.data &&
+          error.response.data.message
+        ) {
+          errorMessage = `LLM服务错误: ${error.response.data.message}`;
+        } else if (error.message) {
+          errorMessage = `调用LLM服务失败: ${error.message}`;
+        }
+        this.$message.error(errorMessage);
+      } finally {
+        this.isLLMProcessing = false;
+      }
+    },
+    applyLLMPreview() {
+      console.log(
+        "Before apply - llmPreviewData:",
+        JSON.parse(JSON.stringify(this.llmPreviewData))
+      ); // <--- 新增日志5
+      if (this.llmPreviewData) {
+        this.graphData = _.cloneDeep(this.llmPreviewData); // 应用预览数据到主图谱
+        console.log(
+          "After apply - graphData:",
+          JSON.parse(JSON.stringify(this.graphData))
+        ); // <--- 新增日志6
+        this.$message.success("LLM生成的图谱已应用！");
+        // 注意：KGBuilder_v1.vue 需要能响应 initData prop 的变化
+        // 如果 KGBuilder_v1.vue 内部有自己的数据副本，可能需要调用其方法来强制刷新
+        if (
+          this.$refs.kg_builder &&
+          typeof this.$refs.kg_builder.clearAndDraw === "function"
+        ) {
+          this.$refs.kg_builder.clearAndDraw(this.graphData); // 假设有这样的方法
+        } else if (
+          this.$refs.kg_builder &&
+          typeof this.$refs.kg_builder.refresh === "function"
+        ) {
+          this.$refs.kg_builder.refresh(); // 或者这样的方法
+        }
+        this.$message.success("LLM图谱已应用！");
+      } else {
+        this.$message.error("没有可应用的LLM图谱数据。");
+      }
+      this.showLLMPreviewControls = false;
+      this.llmPreviewData = null;
+      this.cancelLLMPreview(); // 清理并隐藏控制按钮
+    },
+    cancelLLMPreview() {
+      this.llmPreviewData = null;
+      this.showLLMPreviewControls = false;
     }
   }
 };
@@ -1485,10 +1652,44 @@ ul {
   display: inline-block;
   line-height: 30px;
 }
-.tag-ml-5{
- margin:5px;
- cursor:pointer;
- float:left
+.tag-ml-5 {
+  margin: 5px;
+  cursor: pointer;
+  float: left;
+}
+/* 新增根包装器样式 */
+.mind-box-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden; /* 防止内部滚动影响外层 */
 }
 
+/* LLM 预览控制区域样式 */
+.llm-preview-controls-wrapper {
+  padding: 8px 20px; /* 与 KGHeader 内边距类似 */
+  background-color: #f0f8ff; /*淡蓝色背景*/
+  border-bottom: 1px solid #d4e6f1;
+  /* position: sticky; */ /* 如果希望它在滚动时固定在 KGHeader 下方，可以考虑，但会复杂化布局 */
+  /* top: 76px; */ /* KGHeader的高度，如果sticky */
+  /* z-index: 100; */
+}
+.llm-preview-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 1200px; /* 或与 KGHeader 内容区同宽 */
+  margin: 0 auto;
+  font-size: 14px;
+}
+.llm-preview-controls p {
+  margin: 0;
+  margin-right: 20px;
+  color: #333;
+}
+.llm-preview-controls .buttons {
+  display: flex;
+  gap: 10px;
+}
 </style>

@@ -5,12 +5,12 @@ import store from "./store";
 import ElementUI from "element-ui";
 import "element-ui/lib/theme-chalk/index.css";
 import axios from "axios";
-import components from './components/index'
+import components from "./components/index";
 
 Vue.prototype.$http = axios; //正确的使用
 Vue.config.productionTip = false;
 Vue.use(ElementUI);
-Vue.use(components)
+Vue.use(components);
 new Vue({
   router,
   store,

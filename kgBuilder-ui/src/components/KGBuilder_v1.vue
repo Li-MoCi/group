@@ -190,7 +190,7 @@ export default {
             .forceLink()
             .distance(function(d) {
               return 60;
-               //return Math.floor(Math.random() * (700 - 200)) ;
+              //return Math.floor(Math.random() * (700 - 200)) ;
             })
             .id(function(d) {
               return d.uuid;
@@ -223,6 +223,8 @@ export default {
       const lks = this.graph.links;
       const nodes = this.graph.nodes;
       const links = [];
+
+      // 处理节点数据
       nodes.forEach(function(n) {
         if (n.center === 1 || n.center === "1") {
           n.fx = _this.width / 2;
@@ -244,20 +246,28 @@ export default {
           n.r = parseFloat(n.r);
         }
       });
+
+      // 处理连线数据
       lks.forEach(function(m) {
         const sourceNode = nodes.filter(function(n) {
-          return n.uuid === m.sourceId;
+          return n.uuid === m.source;
         })[0];
-        if (typeof sourceNode === "undefined") return;
         const targetNode = nodes.filter(function(n) {
-          return n.uuid === m.targetId;
+          return n.uuid === m.target;
         })[0];
-        if (typeof targetNode === "undefined") return;
-        links.push({ source: sourceNode.uuid, target: targetNode.uuid, lk: m });
+        if (sourceNode && targetNode) {
+          links.push({
+            source: sourceNode, // 直接使用节点对象
+            target: targetNode, // 直接使用节点对象
+            lk: m
+          });
+        }
       });
+
       // 为每一个节点定制按钮组
       this.addNodeButton();
-      // 连线多个弯曲
+
+      // 处理多条连线的弯曲
       if (links.length > 0) {
         _.each(links, function(link) {
           const same = _.filter(links, {
@@ -284,6 +294,7 @@ export default {
               : s.sameIndex - Math.ceil(s.sameTotalHalf);
           });
         });
+
         const maxSame = _.chain(links)
           .sortBy(function(x) {
             return x.sameTotal;
@@ -295,190 +306,158 @@ export default {
           link.maxSameHalf = Math.round(maxSame / 2);
         });
       }
-      // 更新连线 links
-      d3.selectAll(".line >path").remove();
-      let link = this.linkGroup.selectAll(".line >path").data(links);
+
+      // 更新连线
+      this.linkGroup.selectAll("*").remove(); // 清除所有现有连线
+      let link = this.linkGroup.selectAll("path").data(links);
       link.exit().remove();
       const linkEnter = this.drawLink(link);
       link = linkEnter.merge(link);
-      // // 更新连线文字
-      d3.selectAll(".lineText >g").remove();
+
       // 更新连线文字
+      this.linkTextGroup.selectAll("*").remove();
       const linktext = this.linkTextGroup.selectAll("g").data(links);
       linktext.exit().remove();
       this.drawLinkText(linktext);
+
       // 更新节点按钮组
-      d3.selectAll(".nodeButton >g").remove();
+      this.nodeButtonGroup.selectAll("*").remove();
       let nodeButton = this.nodeButtonGroup
         .selectAll(".nodeButton")
-        .data(nodes, function(d) {
-          return d;
-        });
+        .data(nodes);
       nodeButton.exit().remove();
       const nodeButtonEnter = this.drawNodeButton(nodeButton);
       nodeButton = nodeButtonEnter.merge(nodeButton);
+
       // 更新节点
-      this.nodeGroup.selectAll(".node >g").remove();
-      let node = this.nodeGroup.selectAll(".node >g").data(nodes);
+      this.nodeGroup.selectAll("*").remove();
+      let node = this.nodeGroup.selectAll("g").data(nodes);
       node.exit().remove();
       const nodeEnter = this.drawNode(node);
       node = nodeEnter.merge(node);
+
       // 更新节点文字
-      this.nodeTextGroup.selectAll(".nodeText >g").remove();
-      let nodeText = this.nodeTextGroup.selectAll(".nodeText >g").data(nodes);
+      this.nodeTextGroup.selectAll("*").remove();
+      let nodeText = this.nodeTextGroup.selectAll("g").data(nodes);
       nodeText.exit().remove();
       const nodeTextEnter = this.drawNodeText(nodeText);
       nodeText = nodeTextEnter.merge(nodeText);
+
       // 更新节点标识
       let nodeSymbol = this.nodeSymbolGroup
         .selectAll("path")
-        .data(nodes, function(d) {
-          return d.uuid;
-        });
+        .data(nodes, d => d.uuid);
       nodeSymbol.exit().remove();
       const nodeSymbolEnter = this.drawNodeSymbol(nodeSymbol);
       nodeSymbol = nodeSymbolEnter.merge(nodeSymbol);
-      nodeSymbol.attr("fill", d => {
-        if (d.color) {
-          return d.color;
-        }
-        return "#25BC9E";
-      });
-      nodeSymbol.attr("display", function(d) {
-        if (typeof d.hasFile !== "undefined" && d.hasFile > 0) {
-          return "block";
-        }
-        return "none";
-      });
-      this.simulation.nodes(nodes).on("tick", ticked);
+
+      nodeSymbol
+        .attr("fill", d => d.color || "#25BC9E")
+        .attr("display", d => (d.hasFile > 0 ? "block" : "none"));
+
+      // 设置力导向图
+      this.simulation.nodes(nodes);
       this.simulation.force("link").links(links);
-      this.simulation.alphaTarget(1).restart();
-      // 连线弯曲配置
+
+      // 定义连线路径计算函数
       function linkArc(d) {
+        if (!d.source.x || !d.target.x) return "";
+
         const dx = d.target.x - d.source.x;
         const dy = d.target.y - d.source.y;
         const dr = Math.sqrt(dx * dx + dy * dy);
-        const unevenCorrection = d.sameUneven ? 0 : 0.5;
-        const curvature = 2;
-        let arc =
-          (1.0 / curvature) *
-          ((dr * d.maxSameHalf) / (d.sameIndexCorrected - unevenCorrection));
-        if (d.sameMiddleLink) {
-          arc = 0;
-        }
-        const dd =
-          "M" +
-          d.source.x +
-          "," +
-          d.source.y +
-          "A" +
-          arc +
-          "," +
-          arc +
-          " 0 0," +
-          d.sameArcDirection +
-          " " +
-          d.target.x +
-          "," +
-          d.target.y;
-        return dd;
-      }
-      const linkTextList = this.linkTextGroup.selectAll("g");
-      const linkText = this.linkTextGroup.selectAll("g >text");
-      // 监听布局，更新
-      function ticked() {
-        link.attr("d", linkArc);
-        // 更新节点坐标
-        node
-          .attr("cx", function(d) {
-            return d.x;
-          })
-          .attr("cy", function(d) {
-            return d.y;
-          });
-        // 更新节点操作按钮组坐标
-        nodeButton
-          .attr("cx", function(d) {
-            return d.x;
-          })
-          .attr("cy", function(d) {
-            return d.y;
-          });
 
-        nodeButton.attr("transform", function(d) {
-          return "translate(" + d.x + "," + d.y + ") scale(1)";
-        });
-        // 更新文字坐标
-        nodeText
-          .attr("x", function(d) {
-            return d.x;
-          })
-          .attr("y", function(d) {
-            return d.y;
-          });
-        // 更新回形针坐标
-        nodeSymbol.attr("transform", function(d) {
-          return "translate(" + (d.x + 8) + "," + (d.y - 30) + ") scale(1)";
-        });
+        // 如果源节点和目标节点重合
+        if (dr === 0) {
+          return `M${d.source.x},${d.source.y} C ${d.source.x + 50},${d.source
+            .y + 50} ${d.target.x - 50},${d.target.y - 50} ${d.target.x},${
+            d.target.y
+          }`;
+        }
+
+        // 计算弧度
+        let arc = dr;
+        if (d.sameTotal > 1) {
+          const unevenCorrection = d.sameUneven ? 0 : 0.5;
+          const denominator = d.sameIndexCorrected - unevenCorrection;
+          if (denominator !== 0) {
+            arc = (dr * d.maxSameHalf) / (denominator * 2);
+          }
+        }
+
+        // 如果是中间的连线则画直线
+        if (d.sameMiddleLink) {
+          return `M${d.source.x},${d.source.y} L${d.target.x},${d.target.y}`;
+        }
+
+        return `M${d.source.x},${d.source.y} A${arc},${arc} 0 0,${d.sameArcDirection} ${d.target.x},${d.target.y}`;
+      }
+
+      // 监听布局更新
+      function ticked() {
+        // 更新连线
+        link.attr("d", linkArc);
+
+        // 更新节点位置
+        node.attr("transform", d => `translate(${d.x},${d.y})`);
+
+        // 更新节点按钮组位置
+        nodeButton.attr("transform", d => `translate(${d.x},${d.y}) scale(1)`);
+
+        // 更新节点文字位置
+        nodeText.attr("transform", d => `translate(${d.x},${d.y})`);
+
+        // 更新回形针位置
+        nodeSymbol.attr(
+          "transform",
+          d => `translate(${d.x + 8},${d.y - 30}) scale(1)`
+        );
+
+        // 更新连线文字
+        const linkTextList = _this.linkTextGroup.selectAll("g");
+        const linkText = _this.linkTextGroup.selectAll("g >text");
+
         linkText.attr("dy", 5);
         linkTextList.attr("transform", function(d) {
           if (d.target.x < d.source.x) {
             const bbox = this.getBBox();
             const rx = bbox.x + bbox.width / 2;
             const ry = bbox.y + bbox.height / 2;
-            return "rotate(180 " + rx + " " + ry + ")";
-          } else {
-            return "rotate(360)";
+            return `rotate(180 ${rx} ${ry})`;
           }
+          return "rotate(360)";
         });
       }
-      // 配置缩放
-      // 计算出最小和最大的X，Y
-      // 去除拖拽跳动问题
+
+      // 绑定tick事件
+      this.simulation.on("tick", ticked);
+      this.simulation.alphaTarget(0.3).restart();
+
+      // 处理缩放
       if (this.scale == null) {
-        this.graph.nodes.filter(res => res.uuid);
-        const xExtent = d3.extent(d3.values(this.graph.nodes), function(n) {
-          return n.x;
-        });
-        const yExtent = d3.extent(d3.values(this.graph.nodes), function(n) {
-          return n.y;
-        });
-        const configwidth = this.width;
-        const configHeight = this.height;
-        // （整个屏幕的大小-（最大X-最小X））= 2边空余大小。
-        const trY = configwidth - [xExtent[1]];
-        const trX = xExtent[0];
-        const xty = configHeight - yExtent[1];
-        const xtt = yExtent[0];
-        // 计算整个图像高x和高y 和高宽比
-        const scaleX = parseFloat((xExtent[1] - xExtent[0]) / configwidth);
-        const scaleY = parseFloat((yExtent[1] - yExtent[0]) / configHeight);
-        // 视觉舒服的缩放是0.8  所以 0.8= （高宽最大的）比例 *X 就得来  X= 0.8 * 比例
-        const scale =
-          parseFloat(0.7 / Math.max(scaleX, scaleY)) == "Infinity"
-            ? 1
-            : parseFloat(0.7 / Math.max(scaleX, scaleY));
-        // 偏移量就是 2边空余大小除以2等于2边的大小都一样大，
-        const translateX = trY - xExtent[0];
-        const translateY = -xty;
+        const xExtent = d3.extent(nodes, n => n.x);
+        const yExtent = d3.extent(nodes, n => n.y);
+
+        const scaleX = (xExtent[1] - xExtent[0]) / this.width;
+        const scaleY = (yExtent[1] - yExtent[0]) / this.height;
+
+        const scale = Math.max(0.7 / Math.max(scaleX, scaleY), 1);
         this.scale = scale;
-        if (scale === 1) {
-          this.svg.call(
-            this.zoom.transform,
-            d3.zoomIdentity.translate(0, 0).scale(scale)
-          );
-        } else {
-          this.svg.call(
-            this.zoom.transform,
-            d3.zoomIdentity
-              .translate(parseFloat(translateX * scale), translateY * scale)
-              .scale(scale)
-          );
-        }
+
+        const translateX = this.width / 2 - (xExtent[0] + xExtent[1]) / 2;
+        const translateY = this.height / 2 - (yExtent[0] + yExtent[1]) / 2;
+
+        this.svg.call(
+          this.zoom.transform,
+          d3.zoomIdentity
+            .translate(translateX * scale, translateY * scale)
+            .scale(scale)
+        );
       }
-      // 添加滚轮缩放
+
+      // 添加缩放功能
       this.svg.call(this.zoom);
-      this.svg.on("dblclick.zoom", null); // 静止双击缩放
+      this.svg.on("dblclick.zoom", null);
     },
     // 绘制节点按钮
     addNodeButton() {

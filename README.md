@@ -1,3 +1,115 @@
+# KGBuilder - 知识图谱构建工具
+
+KGBuilder是一个强大的知识图谱构建和可视化工具，支持智能化的图谱构建和直观的可视化交互。
+
+## 主要特性
+
+### 1. 基础功能
+- 知识图谱的可视化展示
+- 节点和关系的基本操作（增删改查）
+- 支持CSV数据导入导出
+- 支持图片导出
+- 支持节点富文本和图片
+- 支持多重关系
+
+### 2. 增强交互功能
+- 优化的拖拽体验
+- 节点和关系样式自定义
+- 支持节点分组和折叠
+- 丰富的快捷键支持
+- 平滑的缩放和平移
+- 智能布局算法
+
+### 3. 智能图谱构建
+- 基于LLM的文本知识抽取
+- 自然语言问答交互
+- 智能图谱生成和推荐
+- 支持多种文本格式
+
+## 快速开始
+
+### 环境要求
+- Java 8+
+- Maven 3.6+
+- Node.js 12+
+- Neo4j 4.x
+
+### 配置说明
+1. 配置Neo4j数据库连接
+```properties
+spring.neo4j.uri=bolt://localhost:7687
+spring.neo4j.authentication.username=neo4j
+spring.neo4j.authentication.password=your-password
+```
+
+2. 配置LLM API（在llm.properties中）
+```properties
+llm.api.key=your-api-key-here
+llm.api.url=https://api.openai.com/v1/chat/completions
+```
+
+### 启动步骤
+1. 启动后端服务
+```bash
+cd kgBuilder-pro
+mvn spring-boot:run
+```
+
+2. 启动前端服务
+```bash
+cd kgBuilder-ui
+npm install
+npm run serve
+```
+
+## 使用指南
+
+### 基础操作
+- 双击空白处：创建新节点
+- 拖拽节点：移动节点位置
+- 点击节点：选中节点
+- Ctrl + 点击：多选节点
+- Delete：删除选中的节点或关系
+
+### 智能助手
+1. 文本知识抽取
+   - 点击"AI分析"按钮
+   - 输入或粘贴文本
+   - 系统自动提取实体和关系
+
+2. 智能问答
+   - 点击"智能助手"按钮
+   - 输入自然语言问题
+   - 获取基于图谱的智能回答
+
+## API文档
+
+### 知识图谱API
+- `GET /api/kg/{domainId}` - 获取指定领域的图谱
+- `POST /api/kg/node` - 创建新节点
+- `PUT /api/kg/node/{id}` - 更新节点
+- `DELETE /api/kg/node/{id}` - 删除节点
+
+### LLM API
+- `POST /api/llm/extract` - 从文本中提取知识
+- `POST /api/llm/query` - 处理自然语言查询
+
+## 开发计划
+- [ ] 支持更多LLM模型
+- [ ] 添加知识验证功能
+- [ ] 优化图谱布局算法
+- [ ] 支持更多数据源
+- [ ] 添加协作编辑功能
+
+## 贡献指南
+欢迎提交Issue和Pull Request。在提交代码前，请确保：
+1. 代码风格符合规范
+2. 添加必要的测试
+3. 更新相关文档
+
+## 许可证
+Apache License 2.0
+
 ## 初衷
 这是一个知识图谱构建工具,最开始是对产品和领导为了做ppt临时要求配合做图谱展示的不厌其烦,做着做着就抽出一个目前看着还算通用的小工具，知识图谱可视化，仅供做知识图谱的小伙伴参考
 ## 技术栈

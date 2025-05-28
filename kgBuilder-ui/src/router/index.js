@@ -1,25 +1,25 @@
 import Vue from "vue";
 import VueRouter from "vue-router";
-import Home from "../views/Home.vue";
+// import Home from "../views/Home.vue"; // Not used, can be removed if Home.vue is not part of this app's routing
 
 Vue.use(VueRouter);
 
 const routes = [
   {
     path: "/",
-    name: "Home",
+    name: "Home", // Or KGBuilderMain
     component: () => import("../views/kgbuilder/index_v1.vue")
   },
   {
-    path: "/builder",
+    path: "/builder", // This path now also points to index_v1.vue as the base
     name: "builder",
-    component: () => import("../views/kgbuilder/index.vue")
-  },
-  {
-    path: "/kg",
-    name: "kg",
     component: () => import("../views/kgbuilder/index_v1.vue")
   },
+  // {
+  //   path: "/kg_v1", // Old path to v1, can be removed or kept if direct access to it under this name is desired
+  //   name: "kg_v1",
+  //   component: () => import("../views/kgbuilder/index_v1.vue"),
+  // },
   {
     path: "/er",
     name: "er",
