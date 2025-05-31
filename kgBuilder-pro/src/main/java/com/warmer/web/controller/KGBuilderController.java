@@ -52,7 +52,8 @@ public class KGBuilderController extends BaseController {
         GraphPageRecord<KgDomain> resultRecord = new GraphPageRecord<KgDomain>();
         try {
             PageHelper.startPage(queryItem.getPageIndex(), queryItem.getPageSize(), true);
-            List<KgDomain> domainList = kgManagerService.getDomainList(queryItem.getDomain(), queryItem.getType(), queryItem.getCommend());
+            List<KgDomain> domainList = kgManagerService.getDomainList(queryItem.getDomain(), queryItem.getType(),
+                    queryItem.getCommend());
             PageInfo<KgDomain> pageInfo = new PageInfo<KgDomain>(domainList);
             long total = pageInfo.getTotal();
             resultRecord.setPageIndex(queryItem.getPageIndex());
@@ -76,12 +77,23 @@ public class KGBuilderController extends BaseController {
     public R<HashMap<String, Object>> queryGraphResult(@RequestBody GraphQuery query) {
         try {
             HashMap<String, Object> graphData = kgGraphService.queryGraphResult(query);
+            if (graphData != null && graphData.containsKey("node")) {
+                List<HashMap<String, Object>> nodesToLog = (List<HashMap<String, Object>>) graphData.get("node");
+                if (nodesToLog != null) {
+                    System.out.println("[KGBuilderController.queryGraphResult] Nodes being sent to client: "
+                            + JsonHelper.toJSONString(nodesToLog));
+                } else {
+                    System.out.println("[KGBuilderController.queryGraphResult] Nodes list is null in graphData.");
+                }
+            } else {
+                System.out.println(
+                        "[KGBuilderController.queryGraphResult] graphData is null or does not contain 'node' key.");
+            }
             return R.success(graphData);
         } catch (Exception e) {
             e.printStackTrace();
             return R.error(e.getMessage());
         }
-
     }
 
     /**
@@ -141,8 +153,8 @@ public class KGBuilderController extends BaseController {
                 if (domainItem.size() > 0) {
                     return R.create(ReturnStatus.Error, "领域已存在");
                 } else {
-                    String label=String.format("%s_%s",domain, IdUtil.nanoId(6));
-                    int domainId = kgManagerService.quickCreateDomain(label,domain, type);// 保存到mysql
+                    String label = String.format("%s_%s", domain, IdUtil.nanoId(6));
+                    int domainId = kgManagerService.quickCreateDomain(label, domain, type);// 保存到mysql
                     kgGraphService.createDomain(label);// 保存到图数据
                     return R.success(domainId);
                 }
@@ -190,7 +202,8 @@ public class KGBuilderController extends BaseController {
         HashMap<String, Object> graphNodeList = new HashMap<String, Object>();
         try {
             if (!StringUtil.isBlank(request.getDomain())) {
-                graphNodeList = kgGraphService.updateNodeName(request.getDomain(), request.getNodeId(), request.getNodeName());
+                graphNodeList = kgGraphService.updateNodeName(request.getDomain(), request.getNodeId(),
+                        request.getNodeName());
                 if (graphNodeList.size() > 0) {
                     return R.success(graphNodeList);
                 }
@@ -258,7 +271,8 @@ public class KGBuilderController extends BaseController {
         HashMap<String, Object> rss = new HashMap<String, Object>();
         try {
             String[] tNames = request.getTargetNames().split(",");
-            rss = kgGraphService.batchCreateNode(request.getDomain(), request.getSourceName(), request.getRelation(), tNames);
+            rss = kgGraphService.batchCreateNode(request.getDomain(), request.getSourceName(), request.getRelation(),
+                    tNames);
             return R.success(rss);
         } catch (Exception e) {
             e.printStackTrace();
@@ -280,7 +294,8 @@ public class KGBuilderController extends BaseController {
         HashMap<String, Object> rss = new HashMap<String, Object>();
         try {
             String[] tNames = request.getTargetNames().split(",");
-            rss = kgGraphService.batchCreateChildNode(request.getDomain(), request.getSourceId(), request.getEntityType(), tNames, request.getRelation());
+            rss = kgGraphService.batchCreateChildNode(request.getDomain(), request.getSourceId(),
+                    request.getEntityType(), tNames, request.getRelation());
             return R.success(rss);
         } catch (Exception e) {
             e.printStackTrace();
@@ -300,7 +315,8 @@ public class KGBuilderController extends BaseController {
     public R<List<HashMap<String, Object>>> batchCreateSameNode(@RequestBody BatchCreateNodeItem request) {
         List<HashMap<String, Object>> rss = new ArrayList<HashMap<String, Object>>();
         try {
-            rss = kgGraphService.batchCreateSameNode(request.getDomain(), request.getEntityType(), request.getSourceNames());
+            rss = kgGraphService.batchCreateSameNode(request.getDomain(), request.getEntityType(),
+                    request.getSourceNames());
             return R.success(rss);
         } catch (Exception e) {
             e.printStackTrace();
@@ -318,7 +334,8 @@ public class KGBuilderController extends BaseController {
     @RequestMapping(value = "/createLink")
     public R<HashMap<String, Object>> createLink(@RequestBody CreateLinkItem request) {
         try {
-            HashMap<String, Object> cypherResult = kgGraphService.createLink(request.getDomain(), request.getSourceId(), request.getTargetId(), request.getShip());
+            HashMap<String, Object> cypherResult = kgGraphService.createLink(request.getDomain(), request.getSourceId(),
+                    request.getTargetId(), request.getShip());
             return R.success(cypherResult);
         } catch (Exception e) {
             e.printStackTrace();
@@ -416,26 +433,24 @@ public class KGBuilderController extends BaseController {
      */
 
     @RequestMapping(value = "/importGraph")
-    public R<String> importGraph(@RequestParam(value = "file", required = true)
-                                 @Validated @NotNull(message = "请上传有效的excel的文件") @Pattern(regexp = "^(?:\\w+\\.xlsx|\\w+\\.xls)$",
-            message = "请上传有效的excel的文件")
-                                 MultipartFile file,
-                                 HttpServletRequest request) {
+    public R<String> importGraph(
+            @RequestParam(value = "file", required = true) @Validated @NotNull(message = "请上传有效的excel的文件") @Pattern(regexp = "^(?:\\w+\\.xlsx|\\w+\\.xls)$", message = "请上传有效的excel的文件") MultipartFile file,
+            HttpServletRequest request) {
         try {
             String domain = request.getParameter("domain");
             Integer type = Integer.parseInt(request.getParameter("type"));
             List<KgDomain> domainList = kgManagerService.getDomainByName(domain);
             int domainExist = 0;
             if (domainList != null && domainList.size() > 0) {
-                //导入已有图谱，更新图谱创建时间
+                // 导入已有图谱，更新图谱创建时间
                 KgDomain domainItem = domainList.get(0);
                 domainItem.setModifyTime(DateUtil.getDateNow());
                 kgManagerService.updateDomain(domainItem);
                 domainExist = 1;
             } else {
-                kgManagerService.quickCreateDomain(domain,domain, type);// 三元组
+                kgManagerService.quickCreateDomain(domain, domain, type);// 三元组
             }
-            if (type.equals(1)) {//三元组导入
+            if (type.equals(1)) {// 三元组导入
                 kgGraphService.importBySyz(file, request, domain, domainExist);
             } else {
                 kgGraphService.importByCategory(file, request, domain);
@@ -463,7 +478,8 @@ public class KGBuilderController extends BaseController {
         String fileName = UUID.randomUUID() + ".csv";
         String fileUrl = filePath + fileName;
         String cypher = String.format(
-                "MATCH (n:`%s`) -[r]->(m:`%s`) return n.name as source,m.name as target,r.name as relation", label, label);
+                "MATCH (n:`%s`) -[r]->(m:`%s`) return n.name as source,m.name as target,r.name as relation", label,
+                label);
         List<HashMap<String, Object>> list = Neo4jUtil.getGraphTable(cypher);
         if (list.size() == 0) {
             res.put("code", -1);
@@ -472,8 +488,8 @@ public class KGBuilderController extends BaseController {
         }
         try {
             CsvWriter csvWriter = CsvUtil.getWriter(fileUrl, CharsetUtil.CHARSET_UTF_8);
-            String[] header = {"source", "target", "relation"};
-            //写入表头
+            String[] header = { "source", "target", "relation" };
+            // 写入表头
             csvWriter.write(header);
             for (HashMap<String, Object> hashMap : list) {
                 int colSize = hashMap.size();
@@ -548,11 +564,25 @@ public class KGBuilderController extends BaseController {
      */
 
     @RequestMapping(value = "/getNodeDetail")
-    public R<Map<String, Object>> getNodeDetail(int domainId, int nodeId) {
+    public R<Map<String, Object>> getNodeDetail(@RequestParam(name = "domainId", required = false) Integer domainId,
+            @RequestParam(name = "nodeId") Integer nodeId) {
         try {
+            // 增加对 domainId 和 nodeId 可能为 null 的检查
+            if (domainId == null) {
+                // 根据业务逻辑处理 domainId 为 null 的情况，例如返回错误或使用默认值
+                // return R.error("domainId 不能为空");
+                // 或者如果业务允许，可以赋一个默认值，但这通常不是好做法，除非有明确定义
+                // domainId = 0; // 示例：赋默认值，但不推荐，除非业务明确如此
+                // 如果业务上 domainId 可以不存在，后续的 service 调用需要能处理 null
+            }
+            if (nodeId == null) {
+                return R.error("nodeId 不能为空"); // nodeId 通常是必须的
+            }
+
             Map<String, Object> res = new HashMap<String, Object>();
             res.put("content", "");
-            res.put("imageList", new String[]{});
+            res.put("imageList", new String[] {});
+            // 注意：如果 domainId 或 nodeId 可能为 null，kgManagerService 的方法需要能处理
             List<KgNodeDetail> contents = kgManagerService.getNodeContent(domainId, nodeId);
             if (contents != null && contents.size() > 0) {
                 res.replace("content", contents.get(0).getContent());

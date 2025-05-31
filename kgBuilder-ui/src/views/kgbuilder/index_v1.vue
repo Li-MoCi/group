@@ -14,7 +14,7 @@
       <div class="llm-preview-controls">
         <p>
           LLM已生成图谱建议，是否应用到当前图谱 "<span
-            style="color:redfont-weight:bold;"
+            style="color: red; font-weight: bold;"
             >{{ domainAlia }}</span
           >"？应用后将替换现有内容。
         </p>
@@ -625,8 +625,76 @@ export default {
       });
     },
     updateCoordinateOfNode(nodes) {
-      let data = { domain: this.domain, nodes: nodes };
-      kgBuilderApi.updateCoordinateOfNode(data).then(result => {});
+      // 后端期望的格式是: { domain: "xxx", nodes: [ { uuid: 1, fx: 10.0, fy: 20.0 }, ... ] }
+      // 当前的 nodes 参数，在拖拽单个节点结束时，它其实是单个节点对象，而不是数组
+
+      const payload = {
+        domain: this.domain,
+        nodes: []
+      };
+
+      // 确保我们处理的是一个数组，即使只有一个节点被更新
+      const nodesToProcess = Array.isArray(nodes) ? nodes : [nodes];
+
+      payload.nodes = nodesToProcess
+        .map(node => {
+          let numericUuid;
+          if (
+            typeof node.uuid === "string" &&
+            node.uuid.startsWith("llm_node_")
+          ) {
+            numericUuid = parseInt(node.uuid.replace("llm_node_", ""));
+          } else if (typeof node.uuid === "number") {
+            numericUuid = node.uuid;
+          } else {
+            console.error("[index_v1.vue] Invalid UUID format for node:", node);
+            // 根据您的错误处理策略，可能需要返回或抛出错误
+            return null; // 或者跳过此节点
+          }
+          return {
+            uuid: numericUuid,
+            fx: node.fx,
+            fy: node.fy
+          };
+        })
+        .filter(node => node !== null); // 移除处理失败的节点
+
+      // 如果没有有效的节点可更新，则不发送请求
+      if (payload.nodes.length === 0) {
+        console.warn(
+          "[index_v1.vue] No valid nodes to update coordinates for."
+        );
+        return;
+      }
+
+      console.log(
+        "[index_v1.vue] Payload for updateCoordinateOfNode:",
+        JSON.stringify(payload)
+      );
+
+      kgBuilderApi
+        .updateCoordinateOfNode(payload)
+        .then(res => {
+          if (res.code === 200) {
+            // this.$message.success('节点坐标更新成功'); // 暂时注释掉 UI 反馈，以便观察控制台
+            console.log(
+              "[index_v1.vue] Node coordinates updated successfully via API."
+            );
+          } else {
+            // this.$message.error('节点坐标更新失败: ' + res.msg);
+            console.error(
+              "[index_v1.vue] Failed to update node coordinates via API: ",
+              res.msg
+            );
+          }
+        })
+        .catch(err => {
+          // this.$message.error('节点坐标更新请求失败: ' + err);
+          console.error(
+            "[index_v1.vue] Error in updateCoordinateOfNode API request: ",
+            err
+          );
+        });
     },
     //删除节点
     deleteNode(out_buttongroup_id) {
@@ -872,20 +940,142 @@ export default {
         pageSize: this.pageSize
       };
       let _this = this;
-      // axios.get('/static/kgData.json', {}).then(function (response) {
-      //   var data = response.data
-      //   console.log(data)
-      //   _this.graphData=data;
-      // //_this.graphData.nodes = data.node;
-      //     // _this.graphData.links =data.relationship;
-      // })
-      // d3.select(".graphContainer >svg").remove();
       kgBuilderApi.getDomainGraph(data).then(result => {
         if (result.code == 200) {
-          if (result.data != null) {
+          if (result.data != null && result.data.node) {
+            let rawNodes = result.data.node;
+            let rawLinks = result.data.relationship || [];
+
+            const internalIdToBusinessUuidMap = new Map();
+            rawNodes.forEach(node => {
+              if (node.id_internal !== undefined && node.uuid !== undefined) {
+                internalIdToBusinessUuidMap.set(
+                  String(node.id_internal),
+                  String(node.uuid)
+                );
+              } else {
+                console.warn(
+                  "[index_v1.vue getDomainGraph] Node missing id_internal or uuid:",
+                  node
+                );
+                if (node.id_internal !== undefined) {
+                  internalIdToBusinessUuidMap.set(
+                    String(node.id_internal),
+                    String(node.id_internal)
+                  );
+                  console.warn(
+                    "[index_v1.vue getDomainGraph] Node (internal_id: " +
+                      node.id_internal +
+                      ") missing business uuid. Falling back to internal_id for link mapping."
+                  );
+                }
+              }
+            });
+            console.log(
+              "[index_v1.vue getDomainGraph] InternalID to BusinessUUID Map:",
+              internalIdToBusinessUuidMap
+            );
+
+            const transformedLinks = rawLinks
+              .map(link => {
+                const sourceBusinessUuid = internalIdToBusinessUuidMap.get(
+                  String(link.sourceId)
+                );
+                const targetBusinessUuid = internalIdToBusinessUuidMap.get(
+                  String(link.targetId)
+                );
+
+                if (!sourceBusinessUuid || !targetBusinessUuid) {
+                  console.warn(
+                    "[index_v1.vue getDomainGraph] Skipping link due to missing mapped business UUID. Link: " +
+                      JSON.stringify(link) +
+                      ", Found source: " +
+                      sourceBusinessUuid +
+                      ", Found target: " +
+                      targetBusinessUuid
+                  );
+                  return null;
+                }
+
+                return {
+                  ...link,
+                  source: sourceBusinessUuid,
+                  target: targetBusinessUuid
+                };
+              })
+              .filter(link => link !== null);
+
+            console.log(
+              "[index_v1.vue getDomainGraph] Raw Nodes:",
+              JSON.stringify(rawNodes)
+            );
+            console.log(
+              "[index_v1.vue getDomainGraph] Transformed Links:",
+              JSON.stringify(transformedLinks)
+            );
+
             _this.graphData = { nodes: [], links: [] };
-            _this.graphData.nodes = result.data.node;
-            _this.graphData.links = result.data.relationship;
+            _this.graphData.nodes = rawNodes;
+            _this.graphData.links = transformedLinks;
+
+            if (
+              _this.$refs.kg_builder &&
+              typeof _this.$refs.kg_builder.updateGraph === "function"
+            ) {
+              console.log(
+                "[index_v1.vue getDomainGraph] Calling kg_builder.updateGraph()"
+              );
+              _this.$refs.kg_builder.updateGraph({
+                nodes: _this.graphData.nodes,
+                links: _this.graphData.links
+              });
+            } else if (
+              _this.$refs.kg_builder &&
+              typeof _this.$refs.kg_builder.drawGraph === "function"
+            ) {
+              console.log(
+                "[index_v1.vue getDomainGraph] Calling kg_builder.drawGraph()"
+              );
+              _this.$refs.kg_builder.drawGraph(
+                _this.graphData.nodes,
+                _this.graphData.links
+              );
+            }
+          } else {
+            _this.graphData = { nodes: [], links: [] };
+            console.warn(
+              "[index_v1.vue getDomainGraph] API returned null data or no nodes."
+            );
+            if (
+              _this.$refs.kg_builder &&
+              typeof _this.$refs.kg_builder.updateGraph === "function"
+            ) {
+              _this.$refs.kg_builder.updateGraph({ nodes: [], links: [] });
+            } else if (
+              _this.$refs.kg_builder &&
+              typeof _this.$refs.kg_builder.drawGraph === "function"
+            ) {
+              _this.$refs.kg_builder.drawGraph([], []);
+            }
+          }
+        } else {
+          console.error(
+            "[index_v1.vue getDomainGraph] API call failed with code: " +
+              result.code +
+              ", msg: " +
+              result.msg
+          );
+          _this.graphData = { nodes: [], links: [] };
+          if (
+            _this.$refs.kg_builder &&
+            typeof _this.$refs.kg_builder.updateGraph === "function"
+          ) {
+            _this.$refs.kg_builder.updateGraph({ nodes: [], links: [] });
+          } else if (
+            _this._thisView &&
+            typeof _this._thisView.updateGraph === "function"
+          ) {
+            _this._thisView.updateGraph({ nodes: [], links: [] });
           }
         }
       });
@@ -1247,38 +1437,131 @@ export default {
         this.isLLMProcessing = false;
       }
     },
-    applyLLMPreview() {
+    applyLLMPreview: async function() {
       console.log(
         "Before apply - llmPreviewData:",
         JSON.parse(JSON.stringify(this.llmPreviewData))
-      ); // <--- 新增日志5
-      if (this.llmPreviewData) {
-        this.graphData = _.cloneDeep(this.llmPreviewData); // 应用预览数据到主图谱
-        console.log(
-          "After apply - graphData:",
-          JSON.parse(JSON.stringify(this.graphData))
-        ); // <--- 新增日志6
-        this.$message.success("LLM生成的图谱已应用！");
-        // 注意：KGBuilder_v1.vue 需要能响应 initData prop 的变化
-        // 如果 KGBuilder_v1.vue 内部有自己的数据副本，可能需要调用其方法来强制刷新
-        if (
-          this.$refs.kg_builder &&
-          typeof this.$refs.kg_builder.clearAndDraw === "function"
-        ) {
-          this.$refs.kg_builder.clearAndDraw(this.graphData); // 假设有这样的方法
-        } else if (
-          this.$refs.kg_builder &&
-          typeof this.$refs.kg_builder.refresh === "function"
-        ) {
-          this.$refs.kg_builder.refresh(); // 或者这样的方法
+      );
+      if (this.llmPreviewData && this.llmPreviewData.nodes) {
+        // 1. Prepare nodes for frontend display (keeping all necessary D3 properties)
+        const nodesForDisplay = this.llmPreviewData.nodes.map(llmNode => ({
+          ...llmNode, // Keep all original LLM properties for flexible display
+          uuid: llmNode.id, // Ensure 'uuid' for D3 keying and compatibility (e.g., "llm_node_1")
+          name: llmNode.name, // Ensure name is present
+          r: llmNode.r || 30,
+          color: llmNode.color,
+          fx: llmNode.fx,
+          fy: llmNode.fy,
+          id: llmNode.id // Ensure 'id' is also present, mirroring uuid
+        }));
+
+        // 2. Prepare links for frontend display
+        // Ensure source and target are the string IDs ("llm_node_X")
+        const linksForDisplay = (this.llmPreviewData.links || []).map(
+          llmLink => ({
+            ...llmLink, // Keep original LLM link properties
+            // Ensure link has a unique id, using template literal correctly
+            id:
+              llmLink.id ||
+              `llm_link_custom_${llmLink.source}_${llmLink.target}`,
+            source: llmLink.source, // Use the original string ID (e.g., "llm_node_1")
+            target: llmLink.target // Use the original string ID (e.g., "llm_node_2")
+          })
+        );
+
+        try {
+          this.$message.info("正在保存LLM生成的节点到数据库...");
+          // 3. Save NODES to backend (existing logic assumed correct from previous steps)
+          // ... (omitted for brevity, assume it's the same as your working version)
+          for (const llmNode of this.llmPreviewData.nodes) {
+            const nodePayloadForBackend = {
+              uuid: parseInt(llmNode.id.replace("llm_node_", ""), 10),
+              name: llmNode.name,
+              domain: this.domainAlia,
+              color: llmNode.color,
+              r: llmNode.r || 30
+            };
+            await kgBuilderApi.createNode(nodePayloadForBackend);
+          }
+          this.$message.success("LLM节点已成功保存！");
+
+          // 4. Save LINKS to backend (existing logic assumed correct from previous steps)
+          if (
+            this.llmPreviewData.links &&
+            this.llmPreviewData.links.length > 0
+          ) {
+            this.$message.info("正在保存LLM生成的连线到数据库...");
+            for (const llmLink of this.llmPreviewData.links) {
+              let sourceNodeIdNum = parseInt(
+                llmLink.source.replace("llm_node_", ""),
+                10
+              );
+              let targetNodeIdNum = parseInt(
+                llmLink.target.replace("llm_node_", ""),
+                10
+              );
+              const linkPayloadForBackend = {
+                domain: this.domainAlia,
+                sourceId: sourceNodeIdNum,
+                targetId: targetNodeIdNum,
+                ship: llmLink.name || llmLink.label || "相关"
+              };
+              console.log(
+                "[index_v1.vue] Payload being passed to kgBuilderApi.createLink:",
+                JSON.stringify(linkPayloadForBackend)
+              );
+              await kgBuilderApi.createLink(linkPayloadForBackend);
+            }
+            this.$message.success("LLM连线已成功保存！");
+          }
+
+          // 5. Update the local graphData for D3 rendering
+          this.graphData.nodes = []; // Clear first
+          this.graphData.links = []; // Clear first
+          this.$nextTick(() => {
+            this.graphData = {
+              nodes: nodesForDisplay,
+              links: linksForDisplay
+            };
+            console.log(
+              "[index_v1.vue] After apply - graphData set for D3 with display-ready nodes & links:",
+              JSON.parse(JSON.stringify(this.graphData))
+            );
+            this.$message.success("LLM图谱已在前端更新，等待D3渲染。");
+            // Use this.$refs.kgGraph consistently
+            if (
+              this.$refs.kgGraph &&
+              this.$refs.kgGraph.updateGraphFromParent
+            ) {
+              this.$refs.kgGraph.updateGraphFromParent(this.graphData);
+            } else if (this.$refs.kgGraph && this.$refs.kgGraph.initGraphData) {
+              this.$refs.kgGraph.initGraphData(this.graphData);
+            }
+          });
+
+          this.isLLMPreview = true;
+        } catch (saveError) {
+          console.error(
+            "[index_v1.vue] Failed to save LLM graph to backend:",
+            saveError
+          );
+          let errorMsg = "保存LLM图谱到数据库失败: ";
+          if (
+            saveError.response &&
+            saveError.response.data &&
+            saveError.response.data.message
+          ) {
+            errorMsg += saveError.response.data.message;
+          } else if (saveError.message) {
+            errorMsg += saveError.message;
+          }
+          this.$message.error(errorMsg);
         }
-        this.$message.success("LLM图谱已应用！");
       } else {
         this.$message.error("没有可应用的LLM图谱数据。");
       }
       this.showLLMPreviewControls = false;
       this.llmPreviewData = null;
-      this.cancelLLMPreview(); // 清理并隐藏控制按钮
     },
     cancelLLMPreview() {
       this.llmPreviewData = null;

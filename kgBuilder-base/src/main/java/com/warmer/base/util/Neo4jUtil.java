@@ -78,17 +78,19 @@ public class Neo4jUtil implements AutoCloseable {
                 for (Record recordItem : records) {
                     List<Pair<String, Value>> f = recordItem.fields();
                     for (Pair<String, Value> pair : f) {
-                        HashMap<String, Object> rss = new HashMap<String, Object>();
                         String typeName = pair.value().type().name();
                         if (typeName.equals("NODE")) {
                             Node noe4jNode = pair.value().asNode();
-                            String uuid = String.valueOf(noe4jNode.id());
-                            Map<String, Object> map = noe4jNode.asMap();
-                            for (Entry<String, Object> entry : map.entrySet()) {
-                                String key = entry.getKey();
-                                rss.put(key, entry.getValue());
+                            Map<String, Object> nodeProperties = noe4jNode.asMap();
+                            HashMap<String, Object> rss = new HashMap<>(nodeProperties);
+
+                            rss.put("id_internal", String.valueOf(noe4jNode.id()));
+
+                            if (!rss.containsKey("uuid")) {
+                                rss.put("uuid", String.valueOf(noe4jNode.id()));
+                                log.warn("Node (internal id: " + noe4jNode.id()
+                                        + ") is missing 'uuid' property. Falling back to internal id for 'uuid' field.");
                             }
-                            rss.put("uuid", uuid);
                             ents.add(rss);
                         }
                     }
@@ -103,12 +105,13 @@ public class Neo4jUtil implements AutoCloseable {
 
     /**
      * 获取数据库索引
+     * 
      * @return
      */
     public static List<HashMap<String, Object>> getGraphIndex() {
         List<HashMap<String, Object>> ents = new ArrayList<HashMap<String, Object>>();
         try (Session session = neo4jDriver.session()) {
-            String cypherSql="call db.indexes";
+            String cypherSql = "call db.indexes";
             Result result = session.run(cypherSql);
             if (result.hasNext()) {
                 List<Record> records = result.list();
@@ -118,10 +121,11 @@ public class Neo4jUtil implements AutoCloseable {
                     for (Pair<String, Value> pair : f) {
                         String key = pair.key();
                         Value value = pair.value();
-                        if(key.equalsIgnoreCase("labelsOrTypes")){
-                            String objects = value.asList().stream().map(n->n.toString()).collect(Collectors.joining(","));
+                        if (key.equalsIgnoreCase("labelsOrTypes")) {
+                            String objects = value.asList().stream().map(n -> n.toString())
+                                    .collect(Collectors.joining(","));
                             rss.put(key, objects);
-                        }else{
+                        } else {
                             rss.put(key, value);
                         }
                     }
@@ -133,10 +137,11 @@ public class Neo4jUtil implements AutoCloseable {
         }
         return ents;
     }
+
     public static List<HashMap<String, Object>> getGraphLabels() {
         List<HashMap<String, Object>> ents = new ArrayList<HashMap<String, Object>>();
         try (Session session = neo4jDriver.session()) {
-            String cypherSql="call db.labels";
+            String cypherSql = "call db.labels";
             Result result = session.run(cypherSql);
             if (result.hasNext()) {
                 List<Record> records = result.list();
@@ -146,10 +151,10 @@ public class Neo4jUtil implements AutoCloseable {
                     for (Pair<String, Value> pair : f) {
                         String key = pair.key();
                         Value value = pair.value();
-                        if(key.equalsIgnoreCase("label")){
-                            String objects =value.toString().replace("\"","");
+                        if (key.equalsIgnoreCase("label")) {
+                            String objects = value.toString().replace("\"", "");
                             rss.put(key, objects);
-                        }else{
+                        } else {
                             rss.put(key, value);
                         }
                     }
@@ -161,10 +166,11 @@ public class Neo4jUtil implements AutoCloseable {
         }
         return ents;
     }
-    public static  Map<String,Object> getLabelsInfo() {
-        Map<String,Object> ent = new HashMap<>();
+
+    public static Map<String, Object> getLabelsInfo() {
+        Map<String, Object> ent = new HashMap<>();
         try (Session session = neo4jDriver.session()) {
-            String cypherSql="CALL apoc.meta.stats() YIELD labels RETURN labels";
+            String cypherSql = "CALL apoc.meta.stats() YIELD labels RETURN labels";
             Result result = session.run(cypherSql);
             if (result.hasNext()) {
                 Record record = result.single();
@@ -176,13 +182,15 @@ public class Neo4jUtil implements AutoCloseable {
         }
         return ent;
     }
+
     /**
      * 删除索引
+     * 
      * @param label
      */
     public static void deleteIndex(String label) {
         try (Session session = neo4jDriver.session()) {
-            String cypherSql=String.format("DROP INDEX ON :`%s`(name)",label);
+            String cypherSql = String.format("DROP INDEX ON :`%s`(name)", label);
             session.run(cypherSql);
         } catch (Exception e) {
             log.error(e.getMessage());
@@ -191,17 +199,19 @@ public class Neo4jUtil implements AutoCloseable {
 
     /**
      * 创建索引
+     * 
      * @param label
      * @param prop
      */
-    public static void createIndex(String label,String prop) {
+    public static void createIndex(String label, String prop) {
         try (Session session = neo4jDriver.session()) {
-            String cypherSql=String.format("CREATE INDEX ON :`%s`(%s)",label,prop);
+            String cypherSql = String.format("CREATE INDEX ON :`%s`(%s)", label, prop);
             session.run(cypherSql);
         } catch (Exception e) {
             log.error(e.getMessage());
         }
     }
+
     public static HashMap<String, Object> getSingleGraphNode(String cypherSql) {
         List<HashMap<String, Object>> ent = getGraphNode(cypherSql);
         if (ent.size() > 0) {
@@ -282,7 +292,6 @@ public class Neo4jUtil implements AutoCloseable {
         return ents;
     }
 
-
     /**
      * 获取值类型的结果,如count,uuid
      *
@@ -320,102 +329,103 @@ public class Neo4jUtil implements AutoCloseable {
                 List<Record> records = result.list();
                 List<HashMap<String, Object>> ents = new ArrayList<HashMap<String, Object>>();
                 List<HashMap<String, Object>> ships = new ArrayList<HashMap<String, Object>>();
-                List<String> uuids = new ArrayList<String>();
+                List<String> processedInternalNodeIds = new ArrayList<String>();
                 for (Record recordItem : records) {
                     List<Pair<String, Value>> f = recordItem.fields();
                     for (Pair<String, Value> pair : f) {
                         HashMap<String, Object> rShips = new HashMap<String, Object>();
-                        HashMap<String, Object> rss = new HashMap<String, Object>();
                         String typeName = pair.value().type().name();
                         if ("NULL".equals(typeName)) {
                             continue;
                         }
                         if ("NODE".equals(typeName)) {
                             Node noe4jNode = pair.value().asNode();
-                            Map<String, Object> map = noe4jNode.asMap();
-                            String uuid = String.valueOf(noe4jNode.id());
-                            if (!uuids.contains(uuid)) {
-                                for (Entry<String, Object> entry : map.entrySet()) {
-                                    String key = entry.getKey();
-                                    rss.put(key, entry.getValue());
+                            String internalId = String.valueOf(noe4jNode.id());
+                            if (!processedInternalNodeIds.contains(internalId)) {
+                                Map<String, Object> nodeProperties = noe4jNode.asMap();
+                                HashMap<String, Object> rss = new HashMap<>(nodeProperties);
+                                rss.put("id_internal", internalId);
+                                if (!rss.containsKey("uuid")) {
+                                    rss.put("uuid", internalId);
+                                    log.warn("Node (internal id: " + internalId
+                                            + ") in getGraphNodeAndShip is missing 'uuid' property. Falling back to internal id for 'uuid' field.");
                                 }
-                                rss.put("uuid", uuid);
-                                uuids.add(uuid);
-                            }
-                            if (!rss.isEmpty()) {
                                 ents.add(rss);
+                                processedInternalNodeIds.add(internalId);
                             }
                         } else if ("RELATIONSHIP".equals(typeName)) {
                             Relationship rship = pair.value().asRelationship();
                             String uuid = String.valueOf(rship.id());
-                            String sourceId = String.valueOf(rship.startNodeId());
-                            String targetId = String.valueOf(rship.endNodeId());
+                            String sourceInternalId = String.valueOf(rship.startNodeId());
+                            String targetInternalId = String.valueOf(rship.endNodeId());
                             Map<String, Object> map = rship.asMap();
                             for (Entry<String, Object> entry : map.entrySet()) {
                                 String key = entry.getKey();
                                 rShips.put(key, entry.getValue());
                             }
                             rShips.put("uuid", uuid);
-                            rShips.put("sourceId", sourceId);
-                            rShips.put("targetId", targetId);
+                            rShips.put("sourceId", sourceInternalId);
+                            rShips.put("targetId", targetInternalId);
                             ships.add(rShips);
                         } else if ("PATH".equals(typeName)) {
                             Path path = pair.value().asPath();
                             for (Node nodeItem : path.nodes()) {
-                                Map<String, Object> map = nodeItem.asMap();
-                                String uuid = String.valueOf(nodeItem.id());
-                                rss = new HashMap<String, Object>();
-                                if (!uuids.contains(uuid)) {
-                                    for (Entry<String, Object> entry : map.entrySet()) {
-                                        String key = entry.getKey();
-                                        rss.put(key, entry.getValue());
+                                String internalId = String.valueOf(nodeItem.id());
+                                if (!processedInternalNodeIds.contains(internalId)) {
+                                    Map<String, Object> nodeProperties = nodeItem.asMap();
+                                    HashMap<String, Object> rssNode = new HashMap<>(nodeProperties);
+                                    rssNode.put("id_internal", internalId);
+                                    if (!rssNode.containsKey("uuid")) {
+                                        rssNode.put("uuid", internalId);
+                                        log.warn("Node (internal id: " + internalId
+                                                + ") in PATH processing (getGraphNodeAndShip) is missing 'uuid' property. Falling back to internal id for 'uuid' field.");
                                     }
-                                    rss.put("uuid", uuid);
-                                    uuids.add(uuid);
-                                }
-                                if (!rss.isEmpty()) {
-                                    ents.add(rss);
+                                    ents.add(rssNode);
+                                    processedInternalNodeIds.add(internalId);
                                 }
                             }
-                            for (Relationship next : path.relationships()) {
+                            for (Relationship nextRel : path.relationships()) {
                                 rShips = new HashMap<String, Object>();
-                                String uuid = String.valueOf(next.id());
-                                String sourceId = String.valueOf(next.startNodeId());
-                                String targetId = String.valueOf(next.endNodeId());
-                                Map<String, Object> map = next.asMap();
+                                String relUuid = String.valueOf(nextRel.id());
+                                String sourceInternalId = String.valueOf(nextRel.startNodeId());
+                                String targetInternalId = String.valueOf(nextRel.endNodeId());
+                                Map<String, Object> map = nextRel.asMap();
                                 for (Entry<String, Object> entry : map.entrySet()) {
                                     String key = entry.getKey();
                                     rShips.put(key, entry.getValue());
                                 }
-                                rShips.put("uuid", uuid);
-                                rShips.put("sourceId", sourceId);
-                                rShips.put("targetId", targetId);
+                                rShips.put("uuid", relUuid);
+                                rShips.put("sourceId", sourceInternalId);
+                                rShips.put("targetId", targetInternalId);
                                 ships.add(rShips);
                             }
                         } else if (typeName.contains("LIST")) {
                             Iterable<Value> val = pair.value().values();
-                            Value next = val.iterator().next();
-                            String type = next.type().name();
-                            if ("RELATIONSHIP".equals(type)) {
-                                Relationship rship = next.asRelationship();
-                                String uuid = String.valueOf(rship.id());
-                                String sourceId = String.valueOf(rship.startNodeId());
-                                String targetId = String.valueOf(rship.endNodeId());
-                                Map<String, Object> map = rship.asMap();
-                                for (Entry<String, Object> entry : map.entrySet()) {
-                                    String key = entry.getKey();
-                                    rShips.put(key, entry.getValue());
+                            for (Value listItem : val) {
+                                if ("RELATIONSHIP".equals(listItem.type().name())) {
+                                    Relationship rship = listItem.asRelationship();
+                                    HashMap<String, Object> rShipItem = new HashMap<>();
+                                    String relUuid = String.valueOf(rship.id());
+                                    String sourceInternalId = String.valueOf(rship.startNodeId());
+                                    String targetInternalId = String.valueOf(rship.endNodeId());
+                                    Map<String, Object> map = rship.asMap();
+                                    for (Entry<String, Object> entry : map.entrySet()) {
+                                        rShipItem.put(entry.getKey(), entry.getValue());
+                                    }
+                                    rShipItem.put("uuid", relUuid);
+                                    rShipItem.put("sourceId", sourceInternalId);
+                                    rShipItem.put("targetId", targetInternalId);
+                                    ships.add(rShipItem);
                                 }
-                                rShips.put("uuid", uuid);
-                                rShips.put("sourceId", sourceId);
-                                rShips.put("targetId", targetId);
-                                ships.add(rShips);
                             }
                         } else if (typeName.contains("MAP")) {
-                            rss.put(pair.key(), pair.value().asMap());
+                            HashMap<String, Object> mapResult = new HashMap<>();
+                            mapResult.put(pair.key(), pair.value().asMap());
+                            ents.add(mapResult);
                         } else {
-                            rss.put(pair.key(), pair.value().toString());
-                            ents.add(rss);
+                            HashMap<String, Object> scalarResult = new HashMap<>();
+                            scalarResult.put(pair.key(), pair.value().toString());
+                            ents.add(scalarResult);
                         }
                     }
                 }
@@ -429,7 +439,6 @@ public class Neo4jUtil implements AutoCloseable {
         return mo;
     }
 
-
     /**
      * 去掉json键的引号，否则neo4j会报错
      *
@@ -441,7 +450,8 @@ public class Neo4jUtil implements AutoCloseable {
     }
 
     /**
-     * 对象转json，key=value,用于 cypher set语句
+     * 对象转json，key=value,用于 cypher set语句.
+     * 此版本会跳过名为 "uuid" 的字段，以防止在SET语句中修改它。
      *
      * @param obj
      * @param <T>
@@ -457,49 +467,83 @@ public class Neo4jUtil implements AutoCloseable {
         for (int i = 0; i < fs.length; i++) {
             Field f = fs[i];
             Class type = f.getType();
+            String key = f.getName(); // 获取字段名
+
+            // 跳过 "uuid" 字段，不将其包含在 SET 子句中
+            if ("uuid".equals(key)) {
+                continue;
+            }
 
             f.setAccessible(true); // 设置些属性是可以访问的
             Object val = new Object();
             try {
                 val = f.get(obj);
                 if (val == null) {
-                    val = "";
+                    // 对于SET子句，如果值为null，通常我们可能想移除该属性或不做任何事
+                    // 或者根据需求设置为特定值，例如空字符串。这里我们跳过null值。
+                    // 如果希望将null值对应的属性也加入SET n.key = null，则需要不同处理。
+                    // 目前行为：如果val为null，则不生成该属性的SET语句部分。
+                    // 如果您的NodeItem中字段默认为null且希望在数据库中也体现为null，则需要调整。
+                    // 通常，如果前端没有传递某个值，我们可能不希望在SET中显式设置它为null，除非业务需要。
+                    // 这里为了简单，如果值为null，我们不将其加入SET列表。
+                    // 如果需要显式设置为null，则应判断 val == null 并构造 "n." + key + "=null"
+                    if (val == null && !(type.isPrimitive())) { // 基本类型不能为null，所以只对对象类型检查
+                        // 如果需要显式设置null，可以在这里添加: sqlList.add("n." + key + "=null");
+                        continue; // 当前选择：不为null值生成SET语句
+                    } else if (val == null && type.isPrimitive()) {
+                        // 这是一个不太可能的情况，基本类型字段被 f.get(obj) 返回 null
+                        // 但作为防御性编程，可以记录或跳过
+                        log.warn("Primitive field " + key + " has null value, skipping in SET clause.");
+                        continue;
+                    }
                 }
                 String sql = "";
-                String key = f.getName();
+                // String key = f.getName(); // 已提前获取
+
                 if (val instanceof String[]) {
-                    //如果为true则强转成String数组
+                    // 如果为true则强转成String数组
                     String[] arr = (String[]) val;
-                    String v = "";
+                    List<String> quotedArr = new ArrayList<>();
                     for (int j = 0; j < arr.length; j++) {
-                        arr[j] = "'" + arr[j] + "'";
+                        quotedArr.add("'" + arr[j].replace("'", "\\'") + "'"); // 对字符串中的单引号进行转义
                     }
-                    v = String.join(",", arr);
-                    sql = "n." + key + "=[" + val + "]";
+                    sql = "n." + key + "=[" + String.join(",", quotedArr) + "]";
                 } else if (val instanceof List) {
-                    //如果为true则强转成String数组
-                    List<String> arr = (ArrayList<String>) val;
-                    List<String> aa = new ArrayList<String>();
-                    String v = "";
-                    for (String s : arr) {
-                        s = "'" + s + "'";
-                        aa.add(s);
+                    // 如果为true则强转成List
+                    List<?> listVal = (List<?>) val;
+                    List<String> processedList = new ArrayList<>();
+                    for (Object item : listVal) {
+                        if (item instanceof String) {
+                            processedList.add("'" + ((String) item).replace("'", "\\'") + "'");
+                        } else {
+                            processedList.add(String.valueOf(item)); // 数字等直接toString
+                        }
                     }
-                    v = String.join(",", aa);
-                    sql = "n." + key + "=[" + v + "]";
+                    sql = "n." + key + "=[" + String.join(",", processedList) + "]";
                 } else {
                     // 得到此属性的值
-                    map.put(key, val);// 设置键值
-                    if (type.getName().equals("int")) {
-                        sql = "n." + key + "=" + val + "";
+                    map.put(key, val);// 设置键值 (map的使用在此方法中似乎不是主要目的)
+                    if (type.getName().equals("int") || type.getName().equals("java.lang.Integer") ||
+                            type.getName().equals("long") || type.getName().equals("java.lang.Long") ||
+                            type.getName().equals("double") || type.getName().equals("java.lang.Double") ||
+                            type.getName().equals("float") || type.getName().equals("java.lang.Float") ||
+                            type.getName().equals("boolean") || type.getName().equals("java.lang.Boolean")) {
+                        sql = "n." + key + "=" + val.toString() + ""; // 数字和布尔值不需要引号
+                    } else if (val instanceof String) {
+                        // 对字符串中的单引号进行转义
+                        sql = "n." + key + "='" + ((String) val).replace("'", "\\'") + "'";
                     } else {
-                        sql = "n." + key + "='" + val + "'";
+                        // 对于其他类型，作为字符串处理（可能需要更具体的转换）
+                        log.warn("Unhandled type in getKeyValCyphersql for field " + key + ": " + type.getName()
+                                + ". Treating as string.");
+                        sql = "n." + key + "='" + val.toString().replace("'", "\\'") + "'";
                     }
                 }
-
-                sqlList.add(sql);
+                if (!sql.isEmpty()) {
+                    sqlList.add(sql);
+                }
             } catch (IllegalArgumentException | IllegalAccessException e) {
-                log.error(e.getMessage());
+                log.error("Error accessing field " + key + ": " + e.getMessage(), e);
             }
         }
         return String.join(",", sqlList);
@@ -528,9 +572,9 @@ public class Neo4jUtil implements AutoCloseable {
                     }
                     Field field = type.getDeclaredField(key);// 获取field对象
                     if (field != null) {
-                        //System.out.print(field.getType());
+                        // System.out.print(field.getType());
                         field.setAccessible(true);
-                        //System.out.print(field.getType().getName());
+                        // System.out.print(field.getType().getName());
                         if (field.getType() == int.class || field.getType() == Integer.class) {
                             if (value == null || StringUtil.isBlank(value.toString())) {
                                 field.set(t, 0);// 设置值
@@ -680,7 +724,6 @@ public class Neo4jUtil implements AutoCloseable {
         return true;
     }
 
-
     public static List<HashMap<String, Object>> toDistinctList(List<HashMap<String, Object>> list) {
         Set<String> keysSet = new HashSet<String>();
         Iterator<HashMap<String, Object>> it = list.iterator();
@@ -696,7 +739,6 @@ public class Neo4jUtil implements AutoCloseable {
         }
         return list;
     }
-
 
     @Override
     public void close() throws Exception {

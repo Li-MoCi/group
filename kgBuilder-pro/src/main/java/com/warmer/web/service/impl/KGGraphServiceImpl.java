@@ -46,10 +46,12 @@ public class KGGraphServiceImpl implements KGGraphService {
     private WebAppConfig config;
     @Autowired
     CategoryNodeService categoryNodeService;
+
     @Override
     public GraphPageRecord<HashMap<String, Object>> getPageDomain(GraphQuery queryItem) {
         return kgRepository.getPageDomain(queryItem);
     }
+
     @Override
     public void deleteKGDomain(String domain) {
         kgRepository.deleteKgDomain(domain);
@@ -77,7 +79,7 @@ public class KGGraphServiceImpl implements KGGraphService {
 
     @Override
     public void quickCreateDomain(String domain, String nodeName) {
-        kgRepository.quickCreateDomain(domain,nodeName);
+        kgRepository.quickCreateDomain(domain, nodeName);
     }
 
     @Override
@@ -92,18 +94,18 @@ public class KGGraphServiceImpl implements KGGraphService {
 
     @Override
     public HashMap<String, Object> createNode(String domain, NodeItem entity) {
-        return kgRepository.createNode(domain, entity);
+        return kgRepository.createNodeWithUUid(domain, entity);
     }
 
     @Override
     public HashMap<String, Object> batchCreateNode(String domain, String sourceName, String relation,
-                                                   String[] targetNames) {
+            String[] targetNames) {
         return kgRepository.batchCreateNode(domain, sourceName, relation, targetNames);
     }
 
     @Override
     public HashMap<String, Object> batchCreateChildNode(String domain, String sourceId, Integer entityType,
-                                                        String[] targetNames, String relation) {
+            String[] targetNames, String relation) {
         return kgRepository.batchCreateChildNode(domain, sourceId, entityType, targetNames, relation);
     }
 
@@ -114,7 +116,7 @@ public class KGGraphServiceImpl implements KGGraphService {
 
     @Override
     public HashMap<String, Object> createLink(String domain, long sourceId, long targetId, String ship) {
-        return kgRepository.createLink(domain, sourceId, targetId, ship);
+        return kgRepository.createLinkByUuid(domain, sourceId, targetId, ship);
     }
 
     @Override
@@ -134,7 +136,7 @@ public class KGGraphServiceImpl implements KGGraphService {
 
     @Override
     public HashMap<String, Object> createGraphByText(String domain, Integer entityType, Integer operateType,
-                                                     Integer sourceId, String[] rss) {
+            Integer sourceId, String[] rss) {
         return kgRepository.createGraphByText(domain, entityType, operateType, sourceId, rss);
     }
 
@@ -145,12 +147,12 @@ public class KGGraphServiceImpl implements KGGraphService {
 
     @Override
     public void updateNodeFileStatus(String domain, long nodeId, int status) {
-        kgRepository.updateNodeFileStatus(domain,nodeId,status);
+        kgRepository.updateNodeFileStatus(domain, nodeId, status);
     }
 
     @Override
     public void updateNodeImg(String domain, long nodeId, String img) {
-        kgRepository.updateNodeImg(domain,nodeId,img);
+        kgRepository.updateNodeImg(domain, nodeId, img);
     }
 
     @Override
@@ -160,12 +162,12 @@ public class KGGraphServiceImpl implements KGGraphService {
 
     @Override
     public void updateCoordinateOfNode(String domain, String uuid, Double fx, Double fy) {
-        kgRepository.updateCoordinateOfNode(domain,uuid,fx,fy);
+        kgRepository.updateCoordinateOfNode(domain, uuid, fx, fy);
     }
 
     @Override
     public void batchUpdateGraphNodesCoordinate(String domain, List<NodeCoordinateItem> nodes) {
-        kgRepository.batchUpdateGraphNodesCoordinate(domain,nodes);
+        kgRepository.batchUpdateGraphNodesCoordinate(domain, nodes);
     }
 
     @Override
@@ -174,22 +176,24 @@ public class KGGraphServiceImpl implements KGGraphService {
     }
 
     @Override
-    public void importBySyz(MultipartFile file,HttpServletRequest request,String label,Integer isCreateIndex) throws Exception {
+    public void importBySyz(MultipartFile file, HttpServletRequest request, String label, Integer isCreateIndex)
+            throws Exception {
         List<Map<String, Object>> dataList = getFormatData(file);
-        String filename = IdUtil.getSnowflakeNextIdStr()+ ".csv";
-        String fullFileName = config.getLocation()+filename;
+        String filename = IdUtil.getSnowflakeNextIdStr() + ".csv";
+        String fullFileName = config.getLocation() + filename;
         CsvWriter writer = CsvUtil.getWriter(fullFileName, CharsetUtil.CHARSET_UTF_8);
         for (Map<String, Object> item : dataList) {
             String[] lst = new String[3];
-            lst[0]=item.get("sourceNode").toString();
-            lst[1]=item.get("targetNode").toString();
-            lst[2]=item.get("relationship").toString();
+            lst[0] = item.get("sourceNode").toString();
+            lst[1] = item.get("targetNode").toString();
+            lst[2] = item.get("relationship").toString();
             writer.write(lst);
         }
-        String serverUrl=request.getServerName() + ":" + request.getServerPort() + request.getContextPath();
-        String csvUrl = "http://"+serverUrl+ "/file/download/" + filename;
+        String serverUrl = request.getServerName() + ":" + request.getServerPort() + request.getContextPath();
+        String csvUrl = "http://" + serverUrl + "/file/download/" + filename;
         batchInsertByCSV(label, csvUrl, isCreateIndex);
     }
+
     private List<Map<String, Object>> getFormatData(MultipartFile file) throws Exception {
         List<Map<String, Object>> mapList = new ArrayList<>();
         try {
@@ -209,22 +213,25 @@ public class KGGraphServiceImpl implements KGGraphService {
                     int rowSize = sheet.getPhysicalNumberOfRows();
                     for (int j = 0; j < rowSize; j++) {
                         Row row = sheet.getRow(j);
-                        if(row==null) continue;
+                        if (row == null)
+                            continue;
                         int cellSize = row.getPhysicalNumberOfCells();
-                        if (cellSize != 3) continue; //只读取3列
+                        if (cellSize != 3)
+                            continue; // 只读取3列
                         row.getCell(0);
-                        Cell cell0 = row.getCell(0);//节点1
+                        Cell cell0 = row.getCell(0);// 节点1
                         row.getCell(1);
-                        Cell cell1 = row.getCell(1);//节点2
+                        Cell cell1 = row.getCell(1);// 节点2
                         row.getCell(2);
-                        Cell cell2 = row.getCell(2);//关系
+                        Cell cell2 = row.getCell(2);// 关系
                         if (null == cell0 || null == cell1 || null == cell2) {
                             continue;
                         }
                         String sourceNode = cell0.getStringCellValue();
                         String targetNode = cell1.getStringCellValue();
                         String relationShip = cell2.getStringCellValue();
-                        if (StringUtil.isBlank(sourceNode) || StringUtils.isBlank(targetNode) || StringUtils.isBlank(relationShip))
+                        if (StringUtil.isBlank(sourceNode) || StringUtils.isBlank(targetNode)
+                                || StringUtils.isBlank(relationShip))
                             continue;
                         Map<String, Object> map = new HashMap<String, Object>();
                         map.put("sourceNode", sourceNode);
@@ -235,7 +242,7 @@ public class KGGraphServiceImpl implements KGGraphService {
                 }
             } else if (fileName.endsWith(".csv")) {
                 CsvReader reader = CsvUtil.getReader();
-                String filename = config.getLocation()+IdUtil.getSnowflakeNextIdStr()+ ".csv";
+                String filename = config.getLocation() + IdUtil.getSnowflakeNextIdStr() + ".csv";
                 File fileTemp = new File(filename);
                 FileUtils.copyInputStreamToFile(file.getInputStream(), fileTemp);
                 CsvData data = reader.read(fileTemp);
@@ -254,18 +261,20 @@ public class KGGraphServiceImpl implements KGGraphService {
         }
         return mapList;
     }
+
     @Override
-    public void importByCategory(MultipartFile file,HttpServletRequest request,String label) throws Exception {
+    public void importByCategory(MultipartFile file, HttpServletRequest request, String label) throws Exception {
         String fileName = file.getOriginalFilename();
         Snowflake snowflake = IdUtil.getSnowflake(1, 1);
         long categoryId = snowflake.nextId();
         TreeExcel treeExcel = new TreeExcel("0", "", fileName, file.getInputStream(), new TreeExcel.IResultHandler() {
             @Override
-            public TreeExcelRecordData store(String cellVal, String cellColor, TreeExcelRecordData parent, boolean isLeaf) {
+            public TreeExcelRecordData store(String cellVal, String cellColor, TreeExcelRecordData parent,
+                    boolean isLeaf) {
                 CategoryNode submitItem = new CategoryNode();
                 String[] split = cellVal.split("###");
-                String nodeName=split[0];
-                String relationName=parent.getLinkName()==null?"":parent.getLinkName();
+                String nodeName = split[0];
+                String relationName = parent.getLinkName() == null ? "" : parent.getLinkName();
                 submitItem.setCategoryNodeName(nodeName);
                 submitItem.setCreateUser("tc");
                 submitItem.setUpdateUser("tc");
@@ -280,7 +289,7 @@ public class KGGraphServiceImpl implements KGGraphService {
                 } else {
                     CategoryNode parentNode = categoryNodeService.selectByPrimaryKey(parentId);
                     if (parentNode != null) {
-                        if(parentNode.getTreeLevel()==null){
+                        if (parentNode.getTreeLevel() == null) {
                             parentNode.setTreeLevel(0);
                         }
                         submitItem.setTreeLevel(parentNode.getTreeLevel() + 1);
@@ -291,22 +300,23 @@ public class KGGraphServiceImpl implements KGGraphService {
 
                 categoryNodeService.insert(submitItem);
                 Integer id = submitItem.getCategoryNodeId();
-                String classCode = String.format("%s%s%s", parent.getClassCode() != null ? parent.getClassCode() : "", StringUtil.isNotBlank(parent.getClassCode()) ? "/" : "", id);
+                String classCode = String.format("%s%s%s", parent.getClassCode() != null ? parent.getClassCode() : "",
+                        StringUtil.isNotBlank(parent.getClassCode()) ? "/" : "", id);
                 categoryNodeService.updateCodeByPrimaryKey(id, classCode);
                 if (parentIsLeaf == 1) {
                     categoryNodeService.updateLeafStatusByPrimaryKey(parentId, 0);
                 }
-                //创建节点
-                NodeItem nodeItem=new NodeItem(id,nodeName,cellColor);
-                kgRepository.createNodeWithUUid(label,nodeItem);
-                //创建关系
-                if(parentId>0){
-                    kgRepository.createLinkByUuid(label,parentId,id,relationName);
+                // 创建节点
+                NodeItem nodeItem = new NodeItem(id, nodeName, cellColor);
+                kgRepository.createNodeWithUUid(label, nodeItem);
+                // 创建关系
+                if (parentId > 0) {
+                    kgRepository.createLinkByUuid(label, parentId, id, relationName);
                 }
                 TreeExcelRecordData data = new TreeExcelRecordData();
                 data.setRecordId(String.valueOf(id));
                 data.setClassCode(classCode);
-                data.setLinkName(split.length>1?split[1]:"");
+                data.setLinkName(split.length > 1 ? split[1] : "");
                 return data;
             }
         });

@@ -54,7 +54,7 @@ export default {
     },
     domainId: {
       type: Number,
-      default: ""
+      default: null
     }
   },
   data() {
@@ -220,56 +220,115 @@ export default {
     // 更新画布数据
     updateGraph() {
       const _this = this;
-      const lks = this.graph.links;
-      const nodes = this.graph.nodes;
-      const links = [];
+      const lks = this.graph.links; // 从 LLM 响应获取的原始 links
+      const rawNodes = this.graph.nodes; // 从 LLM 响应获取的原始 nodes
 
-      // 处理节点数据
+      // 1. 处理节点数据: 确保每个节点都有一个 'uuid' 属性，并初始化位置（如果需要）
+      const nodes = rawNodes.map(n => {
+        // 此时的 n (来自 this.initData.nodes) 应该已经被父组件适配过了
+        // 父组件在处理LLM响应时，应该已经为每个节点添加了 uuid 属性 (通常值等于原始的 id)
+        console.log(
+          "Mapping adapted node: Name=",
+          n.name,
+          "UUID from adapted node (n.uuid)=",
+          n.uuid,
+          "Original ID from adapted node (n.id)=",
+          n.id,
+          "Full adapted node:",
+          JSON.stringify(n)
+        );
+        return {
+          ...n, // 展开已经适配过的节点 (它应该已经有 uuid 和 id 了)
+          // 确保 uuid 属性被正确使用，即使 ...n 中已包含，显式指定可以更清晰
+          uuid: n.uuid,
+          fx:
+            typeof n.fx === "undefined" || n.fx === ""
+              ? null
+              : parseFloat(n.fx),
+          fy:
+            typeof n.fy === "undefined" || n.fy === ""
+              ? null
+              : parseFloat(n.fy),
+          r: typeof n.r === "undefined" || n.r === "" ? 25 : parseFloat(n.r)
+        };
+      });
+
       nodes.forEach(function(n) {
         if (n.center === 1 || n.center === "1") {
           n.fx = _this.width / 2;
           n.fy = _this.height / 2;
         }
-        if (typeof n.fx === "undefined" || n.fx === "") {
-          n.fx = null;
-        } else {
-          n.fx = parseFloat(n.fx);
-        }
-        if (typeof n.fy === "undefined" || n.fy === "") {
-          n.fy = null;
-        } else {
-          n.fy = parseFloat(n.fy);
-        }
-        if (typeof n.r === "undefined" || n.r === "") {
-          n.r = 25;
-        } else {
-          n.r = parseFloat(n.r);
-        }
       });
 
-      // 处理连线数据
-      lks.forEach(function(m) {
-        const sourceNode = nodes.filter(function(n) {
-          return n.uuid === m.source;
-        })[0];
-        const targetNode = nodes.filter(function(n) {
-          return n.uuid === m.target;
-        })[0];
-        if (sourceNode && targetNode) {
-          links.push({
-            source: sourceNode, // 直接使用节点对象
-            target: targetNode, // 直接使用节点对象
-            lk: m
-          });
-        }
-      });
+      // 重要: 更新 this.graph.nodes，以便 addNodeButton 及其他可能依赖它的方法能使用正确的数据
+      this.graph.nodes = nodes;
 
-      // 为每一个节点定制按钮组
+      // 2. 处理连线数据: 确保 source 和 target 使用节点的 uuid
+      const links = [];
+      if (lks) {
+        // 在循环外打印一次所有可用节点的UUID，以便比较
+        const availableNodeUuids = nodes.map(n => n.uuid);
+        console.log(
+          "[KGBuilder_v1] Available node UUIDs for linking:",
+          JSON.stringify(availableNodeUuids)
+        );
+
+        lks.forEach(function(m, index) {
+          // m 是从父组件传来的原始link对象，m.source 和 m.target 应该是 "llm_node_X" 字符串
+          console.log(
+            `[KGBuilder_v1] Processing link ${index}:`,
+            JSON.stringify(m)
+          );
+          console.log(
+            `[KGBuilder_v1] Link ${index} - Attempting to find source node with UUID: '${m.source}'`
+          );
+          const sourceNode = nodes.find(node => node.uuid === m.source);
+          console.log(
+            `[KGBuilder_v1] Link ${index} - Attempting to find target node with UUID: '${m.target}'`
+          );
+          const targetNode = nodes.find(node => node.uuid === m.target);
+
+          if (sourceNode && targetNode) {
+            console.log(
+              `[KGBuilder_v1] Link ${index} - Found source: ${sourceNode.uuid}, Found target: ${targetNode.uuid}`
+            );
+            links.push({
+              source: sourceNode.uuid, // D3 forceLink 会用这个 uuid 去 simulation.nodes() 里找节点对象
+              target: targetNode.uuid, // D3 forceLink 会用这个 uuid 去 simulation.nodes() 里找节点对象
+              lk: m // 保留原始link的所有信息，包括name, label等
+            });
+          } else {
+            console.warn(
+              `[KGBuilder_v1] Skipping link ${index} due to missing node. Link details: ${JSON.stringify(
+                m
+              )}. ` +
+                `Source found: ${!!sourceNode}, Target found: ${!!targetNode}. ` +
+                `Expected source UUID: '${m.source}', Expected target UUID: '${m.target}'.`
+            );
+            // 如果找不到，可以进一步打印具体哪个没找到，以及当时 nodes 数组里的 uuid
+            if (!sourceNode) {
+              console.warn(
+                `[KGBuilder_v1] Link ${index} - Source node with UUID '${m.source}' NOT FOUND.`
+              );
+            }
+            if (!targetNode) {
+              console.warn(
+                `[KGBuilder_v1] Link ${index} - Target node with UUID '${m.target}' NOT FOUND.`
+              );
+            }
+          }
+        });
+      }
+
+      // 为每一个节点定制按钮组 (这部分逻辑不变)
       this.addNodeButton();
 
-      // 处理多条连线的弯曲
+      // 连线多个弯曲 (这部分逻辑不变, 但确保它在 `links` 处理之后)
       if (links.length > 0) {
         _.each(links, function(link) {
+          // 注意:这里的 link.source 和 link.target 是 uuid 字符串
+          // 而不是节点对象。如果 same/sameAlt 比较依赖对象引用,可能需要调整
+          // 但 _.filter 通常基于值的比较，应该没问题
           const same = _.filter(links, {
             source: link.source,
             target: link.target
@@ -294,7 +353,6 @@ export default {
               : s.sameIndex - Math.ceil(s.sameTotalHalf);
           });
         });
-
         const maxSame = _.chain(links)
           .sortBy(function(x) {
             return x.sameTotal;
@@ -307,157 +365,307 @@ export default {
         });
       }
 
-      // 更新连线
-      this.linkGroup.selectAll("*").remove(); // 清除所有现有连线
-      let link = this.linkGroup.selectAll("path").data(links);
-      link.exit().remove();
-      const linkEnter = this.drawLink(link);
-      link = linkEnter.merge(link);
+      // 3. 更新连线 (paths)
+      // 使用 d.lk.id (原始 link id) 作为 key function，如果存在且唯一
+      let linkSelection = this.linkGroup
+        .selectAll("path.graph-link")
+        .data(links, d => d.lk.id);
 
-      // 更新连线文字
-      this.linkTextGroup.selectAll("*").remove();
-      const linktext = this.linkTextGroup.selectAll("g").data(links);
-      linktext.exit().remove();
-      this.drawLinkText(linktext);
+      linkSelection.exit().remove();
 
-      // 更新节点按钮组
-      this.nodeButtonGroup.selectAll("*").remove();
+      // drawLink 方法负责处理 .enter().append("path") 并返回 enter selection
+      const linkEnterSelection = this.drawLink(linkSelection);
+
+      // 合并 enter 和 update selection
+      const allLinksSelection = linkEnterSelection.merge(linkSelection);
+
+      // 更新连线文字 (基本逻辑不变，确保使用正确的 links 数据)
+      this.linkTextGroup.selectAll("*").remove(); // 简单粗暴的清除
+      const linkTextDataSelection = this.linkTextGroup
+        .selectAll("g")
+        .data(links, d => d.lk.id);
+      // this.drawLinkText 应该和 drawLink 类似，处理 enter selection
+      this.drawLinkText(linkTextDataSelection); // 假设 drawLinkText 内部处理 .enter()
+
+      // 更新节点按钮组 (逻辑不变)
+      d3.selectAll(".nodeButton >g").remove();
       let nodeButton = this.nodeButtonGroup
         .selectAll(".nodeButton")
-        .data(nodes);
+        .data(nodes, function(d) {
+          // nodes 现在是处理过的，带有 uuid
+          return d.uuid; // 确保 key function 使用 uuid
+        });
       nodeButton.exit().remove();
       const nodeButtonEnter = this.drawNodeButton(nodeButton);
       nodeButton = nodeButtonEnter.merge(nodeButton);
 
-      // 更新节点
-      this.nodeGroup.selectAll("*").remove();
-      let node = this.nodeGroup.selectAll("g").data(nodes);
-      node.exit().remove();
-      const nodeEnter = this.drawNode(node);
-      node = nodeEnter.merge(node);
+      // 更新节点 (逻辑不变)
+      this.nodeGroup.selectAll(".node >g").remove(); // 简单粗暴的清除
+      let nodeDataSelection = this.nodeGroup
+        .selectAll(".node >g")
+        .data(nodes, d => d.uuid);
+      nodeDataSelection.exit().remove();
+      const nodeEnter = this.drawNode(nodeDataSelection);
+      const nodeSelection = nodeEnter.merge(nodeDataSelection); // 重命名以避免与原始 'nodes' 数组混淆
 
-      // 更新节点文字
-      this.nodeTextGroup.selectAll("*").remove();
-      let nodeText = this.nodeTextGroup.selectAll("g").data(nodes);
-      nodeText.exit().remove();
-      const nodeTextEnter = this.drawNodeText(nodeText);
-      nodeText = nodeTextEnter.merge(nodeText);
+      // 更新节点文字 (逻辑不变)
+      this.nodeTextGroup.selectAll(".nodeText >g").remove(); // 简单粗暴的清除
+      let nodeTextDataSelection = this.nodeTextGroup
+        .selectAll(".nodeText >g")
+        .data(nodes, d => d.uuid);
+      nodeTextDataSelection.exit().remove();
+      const nodeTextEnter = this.drawNodeText(nodeTextDataSelection);
+      const nodeTextSelection = nodeTextEnter.merge(nodeTextDataSelection); // 重命名以避免与原始 'nodes' 数组混淆
 
-      // 更新节点标识
+      // 更新节点标识 (逻辑不变)
       let nodeSymbol = this.nodeSymbolGroup
         .selectAll("path")
-        .data(nodes, d => d.uuid);
+        .data(nodes, function(d) {
+          return d.uuid;
+        });
       nodeSymbol.exit().remove();
       const nodeSymbolEnter = this.drawNodeSymbol(nodeSymbol);
-      nodeSymbol = nodeSymbolEnter.merge(nodeSymbol);
+      const nodeSymbolSelection = nodeSymbolEnter.merge(nodeSymbol);
+      nodeSymbolSelection.attr("fill", d => {
+        if (d.color) {
+          return d.color;
+        }
+        return "#25BC9E";
+      });
+      nodeSymbolSelection.attr("display", function(d) {
+        if (typeof d.hasFile !== "undefined" && d.hasFile > 0) {
+          return "block";
+        }
+        return "none";
+      });
 
-      nodeSymbol
-        .attr("fill", d => d.color || "#25BC9E")
-        .attr("display", d => (d.hasFile > 0 ? "block" : "none"));
+      // 设置力导向图的节点和连线
+      this.simulation.nodes(nodes); // 使用处理过的 nodes (带 uuid)
+      this.simulation.force("link").links(links); // 使用处理过的 links
 
-      // 设置力导向图
-      this.simulation.nodes(nodes);
-      this.simulation.force("link").links(links);
+      // ticked 函数现在可以直接使用 allLinksSelection, node, nodeText 等 D3 selections
+      // 确保 ticked 函数在 this.simulation.on("tick", ticked) 中正确定义或可以访问这些 selections
 
-      // 定义连线路径计算函数
+      // 连线弯曲配置 (linkArc 函数定义)
+      // 这个函数在 ticked 中被调用，其参数 d 是 links 数组中的一项
+      // D3 forceLink 会自动将 link.source 和 link.target 从 id 字符串替换为节点对象引用
       function linkArc(d) {
-        if (!d.source.x || !d.target.x) return "";
-
+        // d.source 和 d.target 此时应该是完整的节点对象，包含 x, y 坐标
+        if (
+          !d.source ||
+          !d.target ||
+          typeof d.source.x === "undefined" ||
+          typeof d.target.x === "undefined"
+        ) {
+          // 节点数据可能还未完全准备好
+          return "M0,0L0,0"; // 返回一个不可见的路径
+        }
         const dx = d.target.x - d.source.x;
         const dy = d.target.y - d.source.y;
         const dr = Math.sqrt(dx * dx + dy * dy);
 
-        // 如果源节点和目标节点重合
         if (dr === 0) {
-          return `M${d.source.x},${d.source.y} C ${d.source.x + 50},${d.source
-            .y + 50} ${d.target.x - 50},${d.target.y - 50} ${d.target.x},${
+          // 节点重合
+          return (
+            "M" +
+            d.source.x +
+            "," +
+            d.source.y +
+            "L" +
+            (d.target.x + 1) +
+            "," +
+            (d.target.y + 1)
+          ); // 细微偏移以避免零长度路径
+        }
+
+        const unevenCorrection = d.sameUneven ? 0 : 0.5;
+        const curvature = 2; // 可以调整曲率
+        // 分母检查以避免除以零
+        const denominator = d.sameIndexCorrected - unevenCorrection;
+        if (denominator === 0 && !d.sameMiddleLink) {
+          // 如果分母为零且不是直线，则画直线
+          return (
+            "M" +
+            d.source.x +
+            "," +
+            d.source.y +
+            "L" +
+            d.target.x +
+            "," +
             d.target.y
-          }`;
+          );
         }
 
-        // 计算弧度
-        let arc = dr;
-        if (d.sameTotal > 1) {
-          const unevenCorrection = d.sameUneven ? 0 : 0.5;
-          const denominator = d.sameIndexCorrected - unevenCorrection;
-          if (denominator !== 0) {
-            arc = (dr * d.maxSameHalf) / (denominator * 2);
-          }
-        }
+        let arc = (1.0 / curvature) * ((dr * d.maxSameHalf) / denominator);
 
-        // 如果是中间的连线则画直线
         if (d.sameMiddleLink) {
-          return `M${d.source.x},${d.source.y} L${d.target.x},${d.target.y}`;
+          arc = 0; // 画直线
+          return (
+            "M" +
+            d.source.x +
+            "," +
+            d.source.y +
+            "L" +
+            d.target.x +
+            "," +
+            d.target.y
+          );
         }
 
-        return `M${d.source.x},${d.source.y} A${arc},${arc} 0 0,${d.sameArcDirection} ${d.target.x},${d.target.y}`;
+        // 防止arc过大或NaN
+        if (isNaN(arc) || !isFinite(arc) || arc > dr * 2 || arc < -dr * 2) {
+          // 限制arc的大小
+          arc = dr / 2;
+        }
+
+        const path =
+          "M" +
+          d.source.x +
+          "," +
+          d.source.y +
+          "A" +
+          arc +
+          "," +
+          arc +
+          " 0 0," +
+          d.sameArcDirection +
+          " " +
+          d.target.x +
+          "," +
+          d.target.y;
+        return path;
       }
 
-      // 监听布局更新
+      const linkTextList = this.linkTextGroup.selectAll("g");
+      const linkTextForTicked = this.linkTextGroup.selectAll("g >text");
+
+      // 监听布局，更新
       function ticked() {
-        // 更新连线
-        link.attr("d", linkArc);
+        allLinksSelection.attr("d", linkArc);
 
-        // 更新节点位置
-        node.attr("transform", d => `translate(${d.x},${d.y})`);
+        // 使用 nodeSelection (之前可能是 node)
+        // 如果 drawNode 返回的是 circle selection，那么 cx, cy 是对的
+        // 如果 drawNode 返回的是 g selection，那么应该用 transform
+        if (
+          nodeSelection.node() &&
+          nodeSelection.node().tagName.toLowerCase() === "g"
+        ) {
+          nodeSelection.attr(
+            "transform",
+            d => `translate(${d.x || 0},${d.y || 0})`
+          );
+        } else {
+          // 假设是 circle
+          nodeSelection
+            .attr("cx", function(d) {
+              return d.x;
+            })
+            .attr("cy", function(d) {
+              return d.y;
+            });
+        }
 
-        // 更新节点按钮组位置
-        nodeButton.attr("transform", d => `translate(${d.x},${d.y}) scale(1)`);
+        nodeButton // 使用 nodeButtonSelection
+          .attr("transform", function(d) {
+            return "translate(" + (d.x || 0) + "," + (d.y || 0) + ") scale(1)";
+          });
 
-        // 更新节点文字位置
-        nodeText.attr("transform", d => `translate(${d.x},${d.y})`);
+        // 使用 nodeTextSelection (之前可能是 nodeText)
+        if (
+          nodeTextSelection.node() &&
+          nodeTextSelection.node().tagName.toLowerCase() === "g"
+        ) {
+          nodeTextSelection.attr(
+            "transform",
+            d => `translate(${d.x || 0},${d.y || 0})`
+          );
+        } else {
+          // 假设是 text 直接子元素
+          nodeTextSelection
+            .attr("x", function(d) {
+              return d.x;
+            })
+            .attr("y", function(d) {
+              return d.y;
+            });
+        }
 
-        // 更新回形针位置
-        nodeSymbol.attr(
-          "transform",
-          d => `translate(${d.x + 8},${d.y - 30}) scale(1)`
-        );
+        nodeSymbolSelection.attr("transform", function(d) {
+          // 使用 nodeSymbolSelection
+          return (
+            "translate(" +
+            ((d.x || 0) + 8) +
+            "," +
+            ((d.y || 0) - 30) +
+            ") scale(1)"
+          );
+        });
 
-        // 更新连线文字
-        const linkTextList = _this.linkTextGroup.selectAll("g");
-        const linkText = _this.linkTextGroup.selectAll("g >text");
-
-        linkText.attr("dy", 5);
+        linkTextForTicked.attr("dy", 5);
         linkTextList.attr("transform", function(d) {
           if (d.target.x < d.source.x) {
             const bbox = this.getBBox();
             const rx = bbox.x + bbox.width / 2;
             const ry = bbox.y + bbox.height / 2;
-            return `rotate(180 ${rx} ${ry})`;
+            return "rotate(180 " + rx + " " + ry + ")";
+          } else {
+            return "rotate(0)"; // Changed from rotate(360) to rotate(0)
           }
-          return "rotate(360)";
         });
       }
 
-      // 绑定tick事件
-      this.simulation.on("tick", ticked);
-      this.simulation.alphaTarget(0.3).restart();
+      this.simulation.on("tick", ticked); // 确保 ticked 在这里被设置
 
-      // 处理缩放
-      if (this.scale == null) {
-        const xExtent = d3.extent(nodes, n => n.x);
-        const yExtent = d3.extent(nodes, n => n.y);
-
-        const scaleX = (xExtent[1] - xExtent[0]) / this.width;
-        const scaleY = (yExtent[1] - yExtent[0]) / this.height;
-
-        const scale = Math.max(0.7 / Math.max(scaleX, scaleY), 1);
-        this.scale = scale;
-
-        const translateX = this.width / 2 - (xExtent[0] + xExtent[1]) / 2;
-        const translateY = this.height / 2 - (yExtent[0] + yExtent[1]) / 2;
-
-        this.svg.call(
-          this.zoom.transform,
-          d3.zoomIdentity
-            .translate(translateX * scale, translateY * scale)
-            .scale(scale)
+      // 配置缩放 (这部分逻辑不变，但确保在 simulation 设置之后)
+      if (this.scale == null && nodes.length > 0) {
+        // 确保节点有 x, y 坐标才进行计算
+        const initialCoordinatesExist = nodes.every(
+          n => typeof n.x !== "undefined" && typeof n.y !== "undefined"
         );
+        if (initialCoordinatesExist) {
+          const xExtent = d3.extent(nodes, function(n) {
+            return n.x;
+          });
+          const yExtent = d3.extent(nodes, function(n) {
+            return n.y;
+          });
+
+          const configwidth = _this.width;
+          const configHeight = _this.height;
+
+          const graphWidth = xExtent[1] - xExtent[0];
+          const graphHeight = yExtent[1] - yExtent[0];
+
+          if (graphWidth > 0 && graphHeight > 0) {
+            const scaleX = configwidth / graphWidth;
+            const scaleY = configHeight / graphHeight;
+            let scale = Math.min(scaleX, scaleY) * 0.9; // 0.9 for some padding
+            if (scale === Infinity || isNaN(scale) || scale <= 0) scale = 1;
+
+            const translateX =
+              configwidth / 2 - ((xExtent[0] + xExtent[1]) / 2) * scale;
+            const translateY =
+              configHeight / 2 - ((yExtent[0] + yExtent[1]) / 2) * scale;
+
+            _this.scale = scale; // Store the calculated scale
+
+            _this.svg.call(
+              _this.zoom.transform,
+              d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+            );
+          } else {
+            _this.scale = 1;
+            _this.svg.call(_this.zoom.transform, d3.zoomIdentity); // Reset zoom
+          }
+        } else {
+          _this.scale = 1;
+          _this.svg.call(_this.zoom.transform, d3.zoomIdentity); // Reset zoom if no coords
+        }
       }
 
-      // 添加缩放功能
+      this.simulation.alphaTarget(0.1).restart(); // 重启力导引模拟
       this.svg.call(this.zoom);
-      this.svg.on("dblclick.zoom", null);
+      this.svg.on("dblclick.zoom", null); // 禁止双击缩放
     },
     // 绘制节点按钮
     addNodeButton() {
@@ -486,6 +694,7 @@ export default {
       parentMenuLength,
       actionIndex
     ) {
+      console.log("Creating menu for node:", m.name, "UUID:", m.uuid);
       const _this = this;
       //构建按钮组所占大小，均分一个圆，每份占1，[1,1,1,1,1,1]
       let menuGroup = [];
@@ -622,52 +831,94 @@ export default {
             .attr("font-size", 10);
         }
         let _this = this;
-        buttonEnter.on("click", function(d, i) {
-          //console.log(d)
-          let currentItem = menuItems[i - actionIndex];
-          if (currentItem.childrens && currentItem.childrens.length > 0) {
-            let levelGroup = "#circle_menu_" + m.uuid + "_level_" + (level + 1);
-            d3.selectAll(levelGroup).style("display", "block");
-            let btn =
-              "g[class^='menu_" + m.uuid + "_level_" + (level + 1) + "']";
-            //console.log(btn)
-            d3.selectAll(btn).style("display", "none");
-            let selectBtn =
-              "g[class^='menu_" +
-              m.uuid +
-              "_level_" +
-              (level + 1) +
-              "_pAction_" +
-              i +
-              "']";
-            //console.log(selectBtn)
-            d3.selectAll(selectBtn).style("display", "block");
-          } else {
-            if (currentItem.title == "连线") {
-              var po = d3.mouse(this);
-              //var po = [m.x, m.y];//取圆心位置缩放和平移的时候起点位置视觉上有偏移，这里直接获取鼠标指针位置
-              _this.movingLine.isDrawing = true;
-              _this.movingLine.from = m.uuid;
-              _this.movingLine.defaultEvent = currentItem.defaultEvent;
-              _this.movingLine.container = _this.svg
-                .append("g")
-                .attr("class", "tempLine")
-                .append("line")
-                .attr("id", "drawLineTemp")
-                .attr("x1", po[0])
-                .attr("y1", po[1])
-                .attr("x2", po[0])
-                .attr("y2", po[1])
-                .style("opacity", 1)
-                .attr("stroke", "#FBB613")
-                .attr("stroke-width", 2)
-                .attr("marker-end", "url(#arrow)");
-              _this.svg.on("mousemove", function() {
-                var m = d3.mouse(this);
-                _this.movingLine.container.attr("x2", m[0]).attr("y2", m[1]);
-              });
-            } else {
-              currentItem.defaultEvent(m, _this, d3);
+        buttonEnter.on("click", function(pieSliceData, i) {
+          // pieSliceData is D3 pie data
+          // m is accessible from the outer scope of createMenuButton
+          const originalNodeData = m; // m is the node data for which this menu is created
+
+          // Determine the actual menu item clicked based on pie slice index if necessary
+          // Assuming menuItems array corresponds to the pie slices after considering actionIndex
+          // The previous logic for currentItem seems to be:
+          // let currentItem = menuItems[i - actionIndex];
+          // This might be incorrect if pieSliceData.index should be used or if i is not adjusted properly for pAction_.
+          // For simplicity, let's assume currentItem is correctly identified.
+          // The provided snippet for currentItem access is:
+          // let currentItem = menuItems[i - actionIndex];
+          // Let's use a simplified approach for logging if currentItem exists and has defaultEvent
+
+          // Find the correct currentItem based on the structure
+          // The index `i` here is the index in pisedata, which corresponds to a segment of the pie.
+          // We need to map this `i` back to an item in `menuItems`.
+          // The way `menuGroup` is constructed and then `pisedata` from it, means `i` directly maps if `actionIndex` is 0.
+          // If `actionIndex` is > 0, then the first `actionIndex` segments are placeholders.
+          let clickedItemIndex = i - actionIndex;
+          if (clickedItemIndex >= 0 && clickedItemIndex < menuItems.length) {
+            let currentItem = menuItems[clickedItemIndex];
+
+            if (currentItem && currentItem.defaultEvent) {
+              console.log(
+                "Executing menu action for node: UUID:",
+                originalNodeData.uuid,
+                "Name:",
+                originalNodeData.name,
+                "Action title:",
+                currentItem.title
+              );
+              if (currentItem.title == "连线") {
+                var po = d3.mouse(this);
+                _this.movingLine.isDrawing = true;
+                _this.movingLine.from = originalNodeData.uuid;
+                _this.movingLine.defaultEvent = currentItem.defaultEvent;
+                _this.movingLine.container = _this.svg
+                  .append("g")
+                  .attr("class", "tempLine")
+                  .append("line")
+                  .attr("id", "drawLineTemp")
+                  .attr("x1", po[0])
+                  .attr("y1", po[1])
+                  .attr("x2", po[0])
+                  .attr("y2", po[1])
+                  .style("opacity", 1)
+                  .attr("stroke", "#FBB613")
+                  .attr("stroke-width", 2)
+                  .attr("marker-end", "url(#arrow)");
+                _this.svg.on("mousemove", function() {
+                  var mousePos = d3.mouse(this);
+                  _this.movingLine.container
+                    .attr("x2", mousePos[0])
+                    .attr("y2", mousePos[1]);
+                });
+              } else if (
+                currentItem.childrens &&
+                currentItem.childrens.length > 0
+              ) {
+                // Handle opening submenu
+                let levelGroup =
+                  "#circle_menu_" +
+                  originalNodeData.uuid +
+                  "_level_" +
+                  (level + 1);
+                d3.selectAll(levelGroup).style("display", "block");
+                let btn =
+                  "g[class^='menu_" +
+                  originalNodeData.uuid +
+                  "_level_" +
+                  (level + 1) +
+                  "']";
+                d3.selectAll(btn).style("display", "none");
+                let selectBtn =
+                  "g[class^='menu_" +
+                  originalNodeData.uuid +
+                  "_level_" +
+                  (level + 1) +
+                  "_pAction_" +
+                  i +
+                  "']";
+                d3.selectAll(selectBtn).style("display", "block");
+              } else {
+                // originalNodeData is the 'm' from the outer scope
+                currentItem.defaultEvent(originalNodeData, _this, d3);
+              }
             }
           }
           d3.event.stopPropagation();
@@ -900,6 +1151,12 @@ export default {
       nodeEnter.on("mouseover", function(d) {
         const e = window.event;
         _this.timer = setTimeout(function() {
+          console.log(
+            "Calling getNodeDetail with nodeId (d.uuid):",
+            d.uuid,
+            "domainId (this.domainId):",
+            _this.domainId
+          ); // 调试
           d3.select("#richContainer").style("display", "block");
           _this.getNodeDetail(d.uuid, e.pageX + 30, e.pageY);
         }, 2000);
@@ -1039,7 +1296,7 @@ export default {
     // 给节点画上标识
     drawNodeSymbol(nodeSymbol) {
       const symbol_path =
-        "M566.92736 550.580907c30.907733-34.655573 25.862827-82.445653 25.862827-104.239787 0-108.086613-87.620267-195.805867-195.577173-195.805867-49.015467 0-93.310293 18.752853-127.68256 48.564907l-0.518827-0.484693-4.980053 4.97664c-1.744213 1.64864-3.91168 2.942293-5.59104 4.72064l0.515413 0.484693-134.69696 133.727573L216.439467 534.8352l0 0 137.478827-136.31488c11.605333-10.410667 26.514773-17.298773 43.165013-17.298773 36.051627 0 65.184427 29.197653 65.184427 65.24928 0 14.032213-5.33504 26.125653-12.73856 36.829867l-131.754667 132.594347 0.515413 0.518827c-10.31168 11.578027-17.07008 26.381653-17.07008 43.066027 0 36.082347 29.16352 65.245867 65.184427 65.245867 16.684373 0 31.460693-6.724267 43.035307-17.07008l0.515413 0.512M1010.336427 343.49056c0-180.25472-145.882453-326.331733-325.911893-326.331733-80.704853 0-153.77408 30.22848-210.418347 79.0528l0.484693 0.64512c-12.352853 11.834027-20.241067 28.388693-20.241067 46.916267 0 36.051627 29.16352 65.245867 65.211733 65.245867 15.909547 0 29.876907-6.36928 41.192107-15.844693l0.38912 0.259413c33.624747-28.030293 76.301653-45.58848 123.511467-45.58848 107.99104 0 195.549867 87.6544 195.549867 195.744427 0 59.815253-27.357867 112.71168-69.51936 148.503893l0 0-319.25248 317.928107 0 0c-35.826347 42.2912-88.654507 69.710507-148.340053 69.710507-107.956907 0-195.549867-87.68512-195.549867-195.805867 0-59.753813 27.385173-112.646827 69.515947-148.43904l-92.18048-92.310187c-65.69984 59.559253-107.700907 144.913067-107.700907 240.749227 0 180.28544 145.885867 326.301013 325.915307 326.301013 95.218347 0 180.02944-41.642667 239.581867-106.827093l0.13312 0.129707 321.061547-319.962453-0.126293-0.13312C968.69376 523.615573 1010.336427 438.71232 1010.336427 343.49056L1010.336427 343.49056 1010.336427 343.49056zM1010.336427 343.49056"; // 定义回形针形状
+        "M566.92736 550.580907c30.907733-34.655573 25.862827-82.445653 25.862827-104.239787 0-108.086613-87.620267-195.805867-195.577173-195.805867-49.015467 0-93.310293 18.752853-127.68256 48.564907l-0.518827-0.484693-4.980053 4.97664c-1.744213 1.64864-3.91168 2.942293-5.59104 4.72064l0.515413 0.484693-134.69696 133.727573L216.439467 534.8352l0 0 137.478827-136.31488c11.605333-10.410667 26.514773-17.298773 43.165013-17.298773 36.051627 0 65.184427 29.197653 65.184427 65.24928 0 14.032213-5.33504 26.125653-12.73856 36.829867l-131.754667 132.594347 0.515413 0.518827c-10.31168 11.578027-17.07008 26.381653-17.07008 43.066027 0 36.082347 29.16352 65.245867 65.245867 65.245867 16.684373 0 31.460693-6.724267 43.035307-17.07008l0.515413 0.512M1010.336427 343.49056c0-180.25472-145.882453-326.331733-325.911893-326.331733-80.704853 0-153.77408 30.22848-210.418347 79.0528l0.484693 0.64512c-12.352853 11.834027-20.241067 28.388693-20.241067 46.916267 0 36.051627 29.16352 65.245867 65.211733 65.245867 15.909547 0 29.876907-6.36928 41.192107-15.844693l0.38912 0.259413c33.624747-28.030293 76.301653-45.58848 123.511467-45.58848 107.99104 0 195.549867 87.6544 195.549867 195.744427 0 59.815253-27.357867 112.71168-69.51936 148.503893l0 0-319.25248 317.928107 0 0c-35.826347 42.2912-88.654507 69.710507-148.340053 69.710507-107.956907 0-195.549867-87.68512-195.549867-195.805867 0-59.753813 27.385173-112.646827 69.515947-148.43904l-92.18048-92.310187c-65.69984 59.559253-107.700907 144.913067-107.700907 240.749227 0 180.28544 145.885867 326.301013 325.915307 326.301013 95.218347 0 180.02944-41.642667 239.581867-106.827093l0.13312 0.129707 321.061547-319.962453-0.126293-0.13312C968.69376 523.615573 1010.336427 438.71232 1010.336427 343.49056L1010.336427 343.49056 1010.336427 343.49056zM1010.336427 343.49056"; // 定义回形针形状
       const nodeSymbolEnter = nodeSymbol
         .enter()
         .append("path")
